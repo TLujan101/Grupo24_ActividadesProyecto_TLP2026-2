@@ -1,0 +1,50 @@
+# snake.brick
+GAME_TYPE SNAKE
+
+GAME_GRID (18, 18)
+
+# --- Definicion de Elementos ---
+DEFINE SHAPE PIXEL:
+  STATE 1:
+    [1]
+END
+
+# --- Logica y Reglas ---
+ON START:
+  SPAWN PLAYER AT (9, 9)
+  SPAWN FOOD AT RANDOM
+END
+
+# ON_TICK es un evento que se ejecuta en cada ciclo del juego
+ON TICK:
+  MOVE PLAYER FORWARD
+END
+
+# Evento para cuando la serpiente come
+ON EAT_FOOD:
+  INCREASE_SCORE 10
+  GROW PLAYER 1
+  SPAWN FOOD AT RANDOM
+END
+
+# Eventos de fin de juego
+ON COLLISION_WALL:
+  GAME_OVER
+END
+ON COLLISION_SELF:
+  GAME_OVER
+END
+
+# --- Controles ---
+ON KEY_UP:
+  SET_DIRECTION UP
+END
+ON KEY_DOWN:
+  SET_DIRECTION DOWN
+END
+ON KEY_LEFT:
+  SET_DIRECTION LEFT
+END
+ON KEY_RIGHT:
+  SET_DIRECTION RIGHT
+END
