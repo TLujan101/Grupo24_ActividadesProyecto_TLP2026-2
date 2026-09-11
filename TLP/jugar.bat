@@ -15,7 +15,7 @@ goto Validar
 )
 :Pedir
     echo.
-    echo  Eliga un juego
+    echo  Elija un juego:
     echo  snake
     echo  tetris
     echo.
