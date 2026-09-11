@@ -5,21 +5,36 @@ REM Limpia la pantalla para una ejecucion limpia
 cls
 
 REM Verifica si se proporciono un nombre de juego.
+:Menu
 if "%1"=="" (
-    echo.
-    echo  Uso: jugar [nombre_del_juego]
-    echo  Ejemplo: jugar snake
-    echo  Ejemplo: jugar tetris
-    echo.
-    goto :eof
+    goto Pedir
 )
+if not "%1"=="" (
+set "Juego=%~1"
+goto Validar
+)
+:Pedir
+    echo.
+    echo  Eliga un juego
+    echo  snake
+    echo  tetris
+    echo.
+    set /p Juego="Elige un juego (snake, tetris): "
+    goto Validar
+:Validar
+    if /I "%Juego%"=="snake" goto Jugar
+    if /I "%Juego%"=="tetris" goto Jugar
+    goto Pedir
 
+
+:Jugar
 REM --- FASE 1: COMPILACION ---
-echo Compilando el juego: %1...
+echo Compilando el juego: %Juego%...
 echo ----------------------------------
 
+
 REM Ejecuta el compilador de Python.
-C:\Python27\python.exe .\compiler.py .\games\%1.brick
+C:\Python27\python.exe .\compiler.py .\games\%Juego%.brick
 
 REM Verifica si el comando anterior (la compilacion) fallo.
 if errorlevel 1 (
@@ -37,7 +52,7 @@ REM Se elimina la pausa para iniciar la GUI inmediatamente
 
 REM --- FASE 2: EJECUCION ---
 REM Ejecuta el motor del juego (runtime.py modificado con GUI).
-C:\Python27\python.exe .\runtime.py .\games\%1.json
+C:\Python27\python.exe .\runtime.py .\games\%Juego%.json
 
 REM Fin del script.
 echo.

@@ -1,0 +1,19 @@
+# Ignorados locales — no subir a GitHub
+# Esta es la razón de ser de este archivo: la carpeta .docs-local/
+# contiene la documentación de trabajo interna (para desarrollar
+# libremente con IA) y GitHub Desktop no debe subirla.
+
+.docs-local/
+
+# Artefactos de Python (por si se prueba el compilador localmente)
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Editores / sistema
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+Desktop.ini
