@@ -61,6 +61,14 @@ class Parser:
         self.consumir('DEFINE')
         self.consumir('SHAPE')
         nombre_shape = self.consumir()
+        color_shape = "CYAN"
+        chance_shape = 10
+        if self.tokens[self.posicion] == "COLOR":
+            self.consumir("COLOR");
+            color_shape = self.consumir()
+        if self.tokens[self.posicion] == "CHANCE":
+            self.consumir("CHANCE");
+            chance_shape = int(self.consumir())
         self.consumir(':')
         estados = []
         while self.posicion < len(self.tokens) and self.tokens[self.posicion] == 'STATE':
@@ -78,7 +86,8 @@ class Parser:
                 matriz.append(fila)
             estados.append(matriz)
         self.consumir('END')
-        self.ast['shapes'][nombre_shape] = estados
+        self.ast['shapes'][nombre_shape] = {"estados": estados, "color": color_shape, "chance": chance_shape}
+
 
     # --- FUNCION CORREGIDA ---
     def parsear_evento(self):
@@ -88,12 +97,12 @@ class Parser:
         acciones = []
         while self.posicion < len(self.tokens) and self.tokens[self.posicion] != 'END':
             verbo = self.consumir()
-            
+
             # Si el comando es de una sola palabra, lo anadimos y continuamos
             if verbo == 'GAME_OVER':
                 acciones.append({'accion': verbo, 'objeto': None, 'params': []})
                 continue
-            
+
             # Si no, parseamos el resto de la accion
             objeto = self.consumir()
             params = []

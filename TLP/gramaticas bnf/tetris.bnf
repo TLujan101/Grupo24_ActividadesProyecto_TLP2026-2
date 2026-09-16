@@ -5,7 +5,8 @@
 <definiciones> ::= <definicion_shape> | <definicion_shape> <definiciones>
 <eventos>    ::= <evento> | <evento> <eventos>
 
-<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> ":" <estados> "END"
+<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <extras> ":" <estados> "END"
+<extras> ::= "" | "COLOR" <identificador> | "CHANCE" <numero> | "COLOR" <identificador> "CHANCE" <numero>
 <estados>          ::= <estado> | <estado> <estados>
 <estado>           ::= "STATE" <numero> ":" <matriz>
 <matriz>           ::= <fila> | <fila> <matriz>
