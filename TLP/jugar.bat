@@ -18,12 +18,14 @@ goto Validar
     echo  Elija un juego:
     echo  snake
     echo  tetris
+    echo  tetris_reborn
     echo.
-    set /p Juego="Elige un juego (snake, tetris): "
+    set /p Juego="Elige un juego (snake, tetris, tetris_reborn): "
     goto Validar
 :Validar
     if /I "%Juego%"=="snake" goto Jugar
     if /I "%Juego%"=="tetris" goto Jugar
+    if /I "%Juego%"=="tetris_reborn" goto Jugar
     goto Pedir
 
 

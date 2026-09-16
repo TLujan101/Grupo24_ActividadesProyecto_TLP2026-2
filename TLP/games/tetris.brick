@@ -4,7 +4,7 @@ GAME_TYPE TETRIS
 GAME_GRID (10, 20)
 
 # --- Definicion de las Piezas ---
-DEFINE SHAPE I_PIECE COLOR CYAN CHANCE 10:
+DEFINE SHAPE I_PIECE:
   STATE 1:
     [0, 1, 0, 0]
     [0, 1, 0, 0]
@@ -15,79 +15,28 @@ DEFINE SHAPE I_PIECE COLOR CYAN CHANCE 10:
     [1, 1, 1, 1]
     [0, 0, 0, 0]
     [0, 0, 0, 0]
-  STATE 3:
-    [0, 1, 0, 0]
-    [0, 1, 0, 0]
-    [0, 1, 0, 0]
-    [0, 1, 0, 0]
-  STATE 4:
-    [0, 0, 0, 0]
-    [1, 1, 1, 1]
-    [0, 0, 0, 0]
-    [0, 0, 0, 0]
 END
-DEFINE SHAPE O_PIECE COLOR YELLOW CHANCE 10:
-  STATE 1:
-    [1, 1]
-    [1, 1]
-END
-DEFINE SHAPE L_PIECE COLOR ORANGE CHANCE 10:
+
+DEFINE SHAPE L_PIECE:
   STATE 1:
     [0, 1, 0]
     [0, 1, 0]
     [0, 1, 1]
   STATE 2:
+    [0, 1, 0]
+    [0, 1, 0]
+    [1, 1, 0]
+  STATE 3:
+    [0, 0, 1]
+    [1, 1, 1]
+    [0, 0, 0]
+  STATE 4:
     [0, 0, 0]
     [1, 1, 1]
     [1, 0, 0]
-  STATE 3:
-    [1, 1, 0]
-    [0, 1, 0]
-    [0, 1, 0]
-  STATE 4:
-    [0, 0, 1]
-    [1, 1, 1]
-    [0, 0, 0]
 END
-DEFINE SHAPE J_PIECE COLOR BLUE CHANCE 10:
-  STATE 1:
-    [0, 1, 0]
-    [0, 1, 0]
-    [1, 1, 0]
-  STATE 2:
-    [1, 0, 0]
-    [1, 1, 1]
-    [0, 0, 0]
-  STATE 3:
-    [0, 1, 1]
-    [0, 1, 0]
-    [0, 1, 0]
-  STATE 4:
-    [0, 0, 0]
-    [1, 1, 1]
-    [0, 0, 1]
-END
-DEFINE SHAPE S_PIECE COLOR GREEN CHANCE 10:
-  STATE 1:
-    [0, 1, 1]
-    [1, 1, 0]
-    [0, 0, 0]
-  STATE 2:
-    [0, 1, 0]
-    [0, 1, 1]
-    [0, 0, 1]
-END
-DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
-  STATE 1:
-    [1, 1, 0]
-    [0, 1, 1]
-    [0, 0, 0]
-  STATE 2:
-    [0, 0, 1]
-    [0, 1, 1]
-    [0, 1, 0]
-END
-DEFINE SHAPE T_PIECE COLOR PURPLE CHANCE 10:
+
+DEFINE SHAPE T_PIECE:
   STATE 1:
     [0, 1, 0]
     [1, 1, 1]

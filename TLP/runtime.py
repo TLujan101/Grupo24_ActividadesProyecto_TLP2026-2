@@ -20,16 +20,20 @@ Colores = {
     "BLUE": "#0000FF",
     "ORANGE": "#FF7F00",
     "WHITE": "#FFFFFF",
-    "BLACK": "#000000"
+    "BLACK": "#000000",
+    "RAINBOW": "#FFFFFF"
 }
+Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
 class Juego:
     def __init__(self, datos_juego):
+        self.frame = 0
         self.datos_juego = datos_juego
         self.tipo_juego = self.datos_juego.get('tipo_juego', 'TETRIS')
         config = self.datos_juego.get('config', {})
         self.ancho = config.get('grid_size', [10, 20])[0]
         self.alto = config.get('grid_size', [10, 20])[1]
         self.grid = [[0 for _ in range(self.ancho)] for _ in range(self.alto)]
+        self.rainbow_grid = [[False for _ in range(self.ancho)] for _ in range(self.alto)]
         self.puntuacion = 0
         self.juego_terminado = False
 
@@ -127,6 +131,7 @@ class Juego:
 
 
     def dibujar(self):
+        self.frame += 1
         self.canvas.delete("all") # Borrar todo en cada frame
         self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
 
@@ -139,7 +144,11 @@ class Juego:
         for y in range(self.alto):
             for x in range(self.ancho):
                 if self.grid[y][x] == 1:
-                     self.dibujar_celda(x, y, COLOR_GRID_FIJA)
+                    if self.rainbow_grid[y][x] == True:
+                        color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
+                    else:
+                        color = COLOR_GRID_FIJA
+                    self.dibujar_celda(x, y, color)
 
         # 2. Dibujar la pieza actual de Tetris
         if self.tipo_juego == 'TETRIS' and self.pieza_actual:
@@ -147,7 +156,11 @@ class Juego:
             for y_offset, fila in enumerate(matriz_pieza):
                 for x_offset, celda in enumerate(fila):
                     if celda == 1:
-                        self.dibujar_celda(self.pieza_x + x_offset, self.pieza_y + y_offset, self.pieza_color)
+                        if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
+                            color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
+                        else:
+                            color = self.pieza_color
+                        self.dibujar_celda(self.pieza_x + x_offset, self.pieza_y + y_offset, color)
 
         # 3. Dibujar Snake y Comida
         if self.tipo_juego == 'SNAKE':
@@ -245,6 +258,8 @@ class Juego:
                 if celda == 1:
                     if 0 <= self.pieza_y + y_offset < self.alto and 0 <= self.pieza_x + x_offset < self.ancho:
                         self.grid[self.pieza_y + y_offset][self.pieza_x + x_offset] = 1
+                        if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
+                            self.rainbow_grid[self.pieza_y + y_offset][self.pieza_x + x_offset] = True
         self.pieza_actual = None
         self.tetris_limpiar_lineas()
         self.ejecutar_evento('ON_START')
@@ -261,11 +276,15 @@ class Juego:
         return False
 
     def tetris_limpiar_lineas(self):
-        nuevo_grid = [fila for fila in self.grid if not all(fila)]
-        lineas_limpias = self.alto - len(nuevo_grid)
-        if lineas_limpias > 0:
-            self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + nuevo_grid
-            for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
+        Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]
+        lineas_limpias = len(Llenas)
+        if lineas_limpias == 0:
+            return
+        Bonus = sum(1 for i in Llenas for x in range(self.ancho) if self.rainbow_grid[i][x])
+        self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.grid) if i not in Llenas]
+        self.rainbow_grid = [[False] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.rainbow_grid) if i not in Llenas]
+        for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
+        for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
 
     def snake_spawn_jugador(self, accion):
         coords = accion['params'][0] if accion['params'] else [self.ancho / 2, self.alto / 2]
