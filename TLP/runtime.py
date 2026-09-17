@@ -68,6 +68,8 @@ class Juego:
         if self.tipo_juego == 'TETRIS':
             self.pieza_actual = None
             self.pieza_color = "#00FFFF"
+            # Premio garantizado: pasa a True al hacer triple, el proximo spawn es POWERUP.
+            self.powerup_pendiente = False
             self.pieza_x, self.pieza_y, self.pieza_rotacion = 0, 0, 0
             self.velocidad_gravedad = 0.4
 
@@ -205,22 +207,30 @@ class Juego:
     # ---------------------------------------------------------------------
 
     def tetris_spawn_pieza(self):
-        Nombres = self.datos_juego['shapes'].keys()
-        Chances = []
-        for Nombre in Nombres:
-            DatosChance = self.datos_juego['shapes'][Nombre]
-            if isinstance(DatosChance, dict):
-                Chances.append(int(DatosChance.get('chance', 10)))
-            else:
-                Chances.append(10)
-        Total = sum(Chances)
-        Tiro = random.randint(1, Total)
-        nombre_pieza = Nombres[0]
-        for Nombre, Chance in zip(Nombres, Chances):
-            Tiro -= Chance
-            if Tiro <= 0:
-                nombre_pieza = Nombre
-                break
+        # Premio garantizado: si hay triple pendiente, sale POWERUP directo
+        # sin pasar por el sorteo (su CHANCE 0 la excluiria del sorteo).
+        if self.powerup_pendiente and 'POWERUP' in self.datos_juego['shapes']:
+            nombre_pieza = 'POWERUP'
+            self.powerup_pendiente = False
+        else:
+            Nombres = self.datos_juego['shapes'].keys()
+            # Sorteo ponderado sin bolsa fisica: cada chance es el tamano de su
+            # porcion en [1, Total]; se resta hasta cruzar 0. Chance 0 = excluida.
+            Chances = []
+            for Nombre in Nombres:
+                DatosChance = self.datos_juego['shapes'][Nombre]
+                if isinstance(DatosChance, dict):
+                    Chances.append(int(DatosChance.get('chance', 10)))
+                else:
+                    Chances.append(10)
+            Total = sum(Chances)
+            Tiro = random.randint(1, Total)
+            nombre_pieza = Nombres[0]
+            for Nombre, Chance in zip(Nombres, Chances):
+                Tiro -= Chance
+                if Tiro <= 0:
+                    nombre_pieza = Nombre
+                    break
         Datos = self.datos_juego['shapes'][nombre_pieza]
         if isinstance(Datos, dict):
             self.pieza_actual = Datos["estados"]
@@ -285,6 +295,9 @@ class Juego:
         self.rainbow_grid = [[False] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.rainbow_grid) if i not in Llenas]
         for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
         for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
+        # TESTING: con 1 linea ya da premio (para entrega volver a >= 3 = triple).
+        if lineas_limpias >= 1:
+            self.powerup_pendiente = True
 
     def snake_spawn_jugador(self, accion):
         coords = accion['params'][0] if accion['params'] else [self.ancho / 2, self.alto / 2]
