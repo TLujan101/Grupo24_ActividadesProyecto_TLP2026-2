@@ -16,16 +16,19 @@ goto Validar
 :Pedir
     echo.
     echo  Elija un juego:
-    echo  snake
-    echo  tetris
-    echo  tetris_reborn
+    dir /b "games\*.brick" >nul 2>&1
+    if errorlevel 1 goto SinJuegos
+    for %%f in (games\*.brick) do echo  %%~nf
     echo.
-    set /p Juego="Elige un juego (snake, tetris, tetris_reborn): "
+    set /p Juego="Elige un juego: "
     goto Validar
+:SinJuegos
+    echo  No hay juegos en games\ - falta *.brick.
+    pause
+    goto :eof
 :Validar
-    if /I "%Juego%"=="snake" goto Jugar
-    if /I "%Juego%"=="tetris" goto Jugar
-    if /I "%Juego%"=="tetris_reborn" goto Jugar
+    if exist "games\%Juego%.brick" goto Jugar
+    echo Juego invalido: %Juego%
     goto Pedir
 
 

@@ -1,18 +1,47 @@
 #!/bin/bash
 # jugar.sh --- Compila y ejecuta juegos de BrickScript (equivalente Linux de jugar.bat)
-# Uso: ./jugar.sh [snake|tetris|tetris_reborn]
+# Uso: ./jugar.sh [numero|juego]   (los nombres se descubren de games/*.brick)
 # Requiere: python2 con Tkinter (ej: paru -S --needed tk python2)
 
 PYTHON2="${PYTHON2:-python2}"
 
+# Descubre los juegos disponibles a partir de games/*.brick (nada hardcodeado).
+shopt -s nullglob
+Archivos=(games/*.brick)
+if [ ${#Archivos[@]} -eq 0 ]; then
+    echo "No hay juegos en games/ (falta *.brick). Abortando."
+    exit 1
+fi
+
 Pedir() {
     echo ""
     echo " Elija un juego:"
-    echo " snake"
-    echo " tetris"
-    echo " tetris_reborn"
+    local i=1 f
+    for f in "${Archivos[@]}"; do
+        echo " $i) $(basename "$f" .brick)"
+        i=$((i + 1))
+    done
     echo ""
-    read -p "Elige un juego (snake, tetris, tetris_reborn): " Juego
+    read -p "Elige un numero o nombre: " Juego
+}
+
+# Resuelve el .brick real a partir de un numero (1-N) o nombre (case-insensitive).
+# Imprime la ruta y retorna 0 si existe; si no, retorna 1.
+Resolver() {
+    local n="$1" f base i
+    if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#Archivos[@]} ]; then
+        echo "${Archivos[$((n - 1))]}"
+        return 0
+    fi
+    n=$(echo "$n" | tr '[:upper:]' '[:lower:]')
+    for f in "${Archivos[@]}"; do
+        base=$(basename "$f" .brick)
+        if [ "$(echo "$base" | tr '[:upper:]' '[:lower:]')" = "$n" ]; then
+            echo "$f"
+            return 0
+        fi
+    done
+    return 1
 }
 
 if [ -n "$1" ]; then
@@ -21,22 +50,22 @@ else
     Pedir
 fi
 
-# Validar (case-insensitive como el /I del .bat)
-JuegoLower=$(echo "$Juego" | tr '[:upper:]' '[:lower:]')
-case "$JuegoLower" in
-    snake|tetris|tetris_reborn) Juego="$JuegoLower" ;;
-    *) echo "Juego invalido: $Juego"; Pedir
-       JuegoLower=$(echo "$Juego" | tr '[:upper:]' '[:lower:]')
-       case "$JuegoLower" in
-           snake|tetris|tetris_reborn) Juego="$JuegoLower" ;;
-           *) echo "Juego invalido. Abortando."; exit 1 ;;
-       esac ;;
-esac
+Brick=$(Resolver "$Juego")
+if [ -z "$Brick" ]; then
+    echo "Juego invalido: $Juego"
+    Pedir
+    Brick=$(Resolver "$Juego")
+    if [ -z "$Brick" ]; then
+        echo "Juego invalido. Abortando."
+        exit 1
+    fi
+fi
+Json="${Brick%.brick}.json"
 
 # --- FASE 1: COMPILACION ---
-echo "Compilando el juego: $Juego..."
+echo "Compilando el juego: $Brick..."
 echo "----------------------------------"
-"$PYTHON2" ./compiler.py "./games/$Juego.brick"
+"$PYTHON2" ./compiler.py "$Brick"
 if [ $? -ne 0 ]; then
     echo ""
     echo "!!! Ocurrio un error durante la compilacion. !!!"
@@ -49,7 +78,7 @@ echo "Compilacion exitosa. Iniciando el juego..."
 echo "----------------------------------"
 
 # --- FASE 2: EJECUCION ---
-"$PYTHON2" ./runtime.py "./games/$Juego.json"
+"$PYTHON2" ./runtime.py "$Json"
 
 echo ""
 echo "El juego se ha cerrado."
