@@ -10,6 +10,9 @@ __pycache__/
 *.py[cod]
 *.pyc
 
+# Generados por compiler.py a partir de los .brick (no versionar)
+TLP/games/*.json
+
 # Editores / sistema
 .vscode/
 .idea/
