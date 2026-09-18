@@ -1,0 +1,65 @@
+Cambios en tetris.brick
+
+> Se declara nueva forma posible ("O"):
+DEFINE SHAPE O_PIECE COLOR YELLOW CHANCE 10:
+  STATE 1:
+    [1, 1]
+    [1, 1]
+END
+
+> Se declara nueva forma de nombre POWERUP, su implementación esta directamente relacionada con el Power Up "Bomba".
+DEFINE SHAPE POWERUP COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1]
+    END
+
+
+DEFINE SHAPE CLEAR_LINE_PIECE COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1]
+        [0, 0]
+    STATE 2:
+        [1, 0]
+        [1, 0]
+    STATE 3:
+        [0, 1]
+        [0, 1]
+END
+
+DEFINE SHAPE S_PIECE COLOR GREEN CHANCE 10:
+  STATE 1:
+    [0, 1, 1]
+    [1, 1, 0]
+    [0, 0, 0]
+  STATE 2:
+    [0, 1, 0]
+    [0, 1, 1]
+    [0, 0, 1]
+  STATE 3:
+    [0, 0, 0]
+    [0, 1, 1]
+    [1, 1, 0]
+  STATE 4:
+    [1, 0, 0]
+    [1, 1, 0]
+    [0, 1, 0]
+
+END
+DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
+  STATE 1:
+    [1, 1, 0]
+    [0, 1, 1]
+    [0, 0, 0]
+  STATE 2:
+    [0, 0, 1]
+    [0, 1, 1]
+    [0, 1, 0]
+  STATE 3:
+    [0, 0, 0]
+    [1, 1, 0]
+    [0, 1, 1]
+  STATE 4:
+    [0, 1, 0]
+    [1, 1, 0]
+    [1, 0, 0]
+END
