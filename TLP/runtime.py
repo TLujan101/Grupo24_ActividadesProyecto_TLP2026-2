@@ -12,6 +12,7 @@ import tkMessageBox # Necesario para el GAME OVER
 # Quitamos os y msvcrt ya que la GUI maneja el dibujo y el input
 # import os
 # import msvcrt
+#
 Colores = {
     "CYAN": "#00FFFF",
     "YELLOW": "#FFFF00",
@@ -22,7 +23,10 @@ Colores = {
     "ORANGE": "#FF7F00",
     "WHITE": "#FFFFFF",
     "BLACK": "#000000",
-    "RAINBOW": "#FFFFFF"
+    "RAINBOW": "#FFFFFF",
+    "DARK_GRAY": '#343434', # Gris oscuro para las celdas fijadas (Tetris)
+    "BRIGHT_GREEN": '#00FF00', # Verde brillante
+    "NORMAL_GREEN": '#33CC33', # Verde normal
 }
 Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
 
@@ -164,10 +168,7 @@ class Juego:
         self.canvas.delete("all") # Borrar todo en cada frame
         self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
 
-        COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas (Tetris)
-        COLOR_SNAKE_CABEZA = '#00FF00' # Verde brillante
-        COLOR_SNAKE_CUERPO = '#33CC33' # Verde normal
-        COLOR_FOOD = '#FF0000'      # Rojo
+
 
         # 1. Dibujar la cuadricula estatica (grid base)
         for y in range(self.alto):
@@ -176,7 +177,7 @@ class Juego:
                     if self.rainbow_grid[y][x] == True:
                         color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
                     else:
-                        color = COLOR_GRID_FIJA
+                        color = Colores.get("DARK_GRAY")
                     self.dibujar_celda(x, y, color)
 
         # 2. Dibujar la pieza actual de Tetris
@@ -196,18 +197,18 @@ class Juego:
             # Comida
             if self.posicion_comida:
                 x, y = self.posicion_comida
-                self.dibujar_celda(x, y, COLOR_FOOD)
+                self.dibujar_celda(x, y, Colores.get("RED"))
             # Cuerpo de la Serpiente
             for i, segmento in enumerate(self.serpiente_cuerpo):
                 x, y = segmento
-                color = COLOR_SNAKE_CABEZA if i == 0 else COLOR_SNAKE_CUERPO
+                color = Colores.get("BRIGHT_GREEN") if i == 0 else Colores.get("NORMAL_GREEN")
                 self.dibujar_celda(x, y, color)
 
     def dibujar_celda(self, x, y, color):
         ts = self.taman_celda # Alias para taman de celda
         x1, y1 = x * ts, y * ts
         x2, y2 = x1 + ts, y1 + ts
-        self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline='#000000')
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline=Colores.get("BLACK"))
 
 
     def ejecutar_evento(self, nombre_evento):
