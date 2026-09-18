@@ -91,6 +91,8 @@ class Juego:
             self.powerup_pendiente = False
             self._nombres_piezas = []
             self._pesos_piezas = []
+            self._acum_chances = []
+            SumaChances = 0
             for NombrePool in self.datos_juego['shapes'].keys():
                 if NombrePool == 'POWERUP':
                     continue
@@ -101,6 +103,11 @@ class Juego:
                     PesoPool = 10
                 self._nombres_piezas.append(NombrePool)
                 self._pesos_piezas.append(PesoPool)
+                SumaChances += PesoPool
+                self._acum_chances.append(SumaChances)
+            if SumaChances <= 0:
+                raise ValueError("Los pesos deben sumar > 0")
+            self._suma_chances = SumaChances
             self.pieza_x, self.pieza_y, self.pieza_rotacion = 0, 0, 0
             self.velocidad_gravedad = 0.4
 
@@ -239,7 +246,10 @@ class Juego:
             nombre_pieza = 'POWERUP'
             self.powerup_pendiente = False
         else:
-            nombre_pieza = eleccion_ponderada(self._nombres_piezas, self._pesos_piezas)
+            # O(log n): acumulados precalculados en __init__, solo tiro + bisect.
+            tiro = random.randint(1, self._suma_chances)
+            idx = bisect.bisect_left(self._acum_chances, tiro)
+            nombre_pieza = self._nombres_piezas[idx]
         Datos = self.datos_juego['shapes'][nombre_pieza]
         if isinstance(Datos, dict):
             self.pieza_actual = Datos["estados"]
