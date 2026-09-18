@@ -1,0 +1,91 @@
+=============================================================
+      BrickScript: Requisitos de Instalacion y Ejecucion
+=============================================================
+
+Este documento describe el software necesario y los pasos para compilar y ejecutar los juegos creados con el lenguaje BrickScript.
+
+
+-------------------------------------------------------------
+## 1. Requisitos de Software
+-------------------------------------------------------------
+
+Este proyecto fue disenado para ser extremadamente ligero y compatible con sistemas operativos antiguos, cumpliendo con la restriccion de caber en un disquete.
+
+* **Sistema Operativo:** **Windows XP** o superior (Windows 7, 8, 10, 11).
+* **Interprete de Python:** Se requiere **Python 2.7**.
+    * **IMPORTANTE:** El codigo **NO** es compatible con Python 3 o superior.
+    * Durante la instalacion de Python 2.7, se recomienda seleccionar la opcion "Add python.exe to Path" para poder ejecutar comandos de python desde cualquier ubicacion.
+* **Dependencias:** **Ninguna.** El proyecto completo utiliza unicamente la libreria estandar de Python 2.7. No es necesario instalar paquetes o modulos adicionales.
+
+
+-------------------------------------------------------------
+## 2. Estructura de Archivos del Proyecto
+-------------------------------------------------------------
+
+Para que los scripts funcionen correctamente, los archivos deben estar organizados de la siguiente manera:
+
+    C:\TPL\
+    |
+    +--- compiler.py         (El compilador que traduce .brick a .json)
+    +--- runtime.py          (El motor que ejecuta los juegos .json)
+    +--- jugar.bat           (El script para compilar y jugar facilmente)
+    +--- README.txt          (Informacion general del lenguaje)
+    +--- REQUISITOS...txt    (Este archivo)
+    |
+    \--- games\
+         +--- tetris.brick    (Codigo fuente del juego Tetris)
+         +--- snake.brick     (Codigo fuente del juego Snake)
+         \--- (Aqui se generaran los archivos .json)
+
+
+-------------------------------------------------------------
+## 3. Como Compilar y Ejecutar un Juego
+-------------------------------------------------------------
+
+La forma mas sencilla de jugar es utilizando el script `jugar.bat`.
+
+1.  **Abre la Consola de Comandos:**
+    * Ve a `Inicio > Ejecutar`, escribe `cmd.exe` y presiona Enter.
+
+2.  **Navega a la Carpeta del Proyecto:**
+    * Escribe el comando para cambiar de directorio. Por ejemplo:
+      ```
+      cd C:\tpl
+      ```
+
+3.  **Ejecuta el Script `jugar.bat`:**
+    * Escribe `jugar` seguido del nombre del juego que deseas probar (sin la extension `.brick`).
+
+    * **Para jugar Snake:**
+        ```
+        .\jugar snake
+        ```
+    * **Para jugar Tetris:**
+        ```
+        .\jugar tetris
+        ```
+
+El script se encargara de llamar al **compilador** (`compiler.py`) para traducir el codigo `.brick` a un archivo `.json`. Si la compilacion es exitosa, automaticamente ejecutara el **motor de juego** (`runtime.py`) con el archivo `.json` recien creado.
+
+
+-------------------------------------------------------------
+## 4. Solucion de Problemas Comunes
+-------------------------------------------------------------
+
+* **Error: `'python' no se reconoce como un comando interno o externo...`**
+    * **Causa:** Python 2.7 no fue agregado al PATH del sistema durante su instalacion.
+    * **Solucion:** ¡No te preocupes! El script `jugar.bat` esta disenado para solucionar esto. Asume que Python esta instalado en `C:\Python27\`. Si lo instalaste en otra carpeta, simplemente abre `jugar.bat` con el Bloc de Notas y modifica la ruta `C:\Python27\python.exe` por la tuya.
+
+* **Error: `ImportError: No module named _curses`**
+    * **Causa:** Estas intentando ejecutar una version del `runtime.py` disenada para Linux o macOS.
+    * **Solucion:** Asegurate de tener la version final del `runtime.py` que hemos desarrollado, la cual utiliza el modulo `msvcrt` que es nativo de Windows y no requiere `curses`.
+
+* **El juego no compila y muestra "ERROR DE COMPILACION"**
+    * **Causa:** Hay un error de sintaxis en el archivo `.brick` que modificaste.
+    * **Solucion:** Revisa cuidadosamente tu codigo `.brick` y comparalo con los ejemplos de `tetris.brick` y `snake.brick`. Asegurate de que todas las palabras clave esten bien escritas y que los parentesis y dos puntos esten en su lugar.
+
+
+
+
+
+
