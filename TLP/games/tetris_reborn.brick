@@ -31,10 +31,24 @@ DEFINE SHAPE O_PIECE COLOR YELLOW CHANCE 10:
     [1, 1]
     [1, 1]
 END
+
 DEFINE SHAPE POWERUP COLOR RAINBOW CHANCE 0:
     STATE 1:
         [1]
     END
+
+DEFINE SHAPE CLEAR_LINE_PIECE COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1]
+        [0, 0]
+    STATE 2:
+        [1, 0]
+        [1, 0]
+    STATE 3:
+        [0, 1]
+        [0, 1]
+END
+
 DEFINE SHAPE L_PIECE COLOR ORANGE CHANCE 10:
   STATE 1:
     [0, 1, 0]
@@ -80,6 +94,15 @@ DEFINE SHAPE S_PIECE COLOR GREEN CHANCE 10:
     [0, 1, 0]
     [0, 1, 1]
     [0, 0, 1]
+  STATE 3:
+    [0, 0, 0]
+    [0, 1, 1]
+    [1, 1, 0]
+  STATE 4:
+    [1, 0, 0]
+    [1, 1, 0]
+    [0, 1, 0]
+
 END
 DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
   STATE 1:
@@ -90,6 +113,14 @@ DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
     [0, 0, 1]
     [0, 1, 1]
     [0, 1, 0]
+  STATE 3:
+    [0, 0, 0]
+    [1, 1, 0]
+    [0, 1, 1]
+  STATE 4:
+    [0, 1, 0]
+    [1, 1, 0]
+    [1, 0, 0]
 END
 DEFINE SHAPE T_PIECE COLOR PURPLE CHANCE 10:
   STATE 1:
@@ -110,9 +141,32 @@ DEFINE SHAPE T_PIECE COLOR PURPLE CHANCE 10:
     [0, 1, 0]
 END
 
+DEFINE SHAPE SUPERBOMBA COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1]
+        [1, 1]
+END
+
+DEFINE SHAPE CLEAR_THREE_PIECE COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1, 1]
+    STATE 2:
+        [1]
+        [1]
+        [1]
+END
+
 # --- Logica y Reglas ---
 ON START:
   SPAWN RANDOM_SHAPE
+END
+
+
+ON PIECE_LAND:
+    IF CURRENT_PIECE IS POWERUP:
+        EXPLODE_RADIUS 1
+        SPAWN RANDOM_SHAPE
+    END
 END
 
 # ON_TICK es el evento que controla la gravedad
