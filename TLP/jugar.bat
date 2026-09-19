@@ -73,13 +73,13 @@ goto :eof
 
 :Pedir
 echo.
-echo  Elija un juego:
+echo  Menu de Juegos:
 for /L %%i in (1,1,!Count!) do (
     echo  %%i^) !Game_%%i!
 )
 echo.
 set "Juego="
-set /p Juego="Elige un numero o nombre: "
+set /p Juego="Selecciona un Numero o Nombre: "
 goto :eof
 
 REM Resuelve el .brick real a partir de un numero (1-N) o nombre (case-insensitive).

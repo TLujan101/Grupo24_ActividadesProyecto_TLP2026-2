@@ -12,7 +12,6 @@ import tkMessageBox # Necesario para el GAME OVER
 # Quitamos os y msvcrt ya que la GUI maneja el dibujo y el input
 # import os
 # import msvcrt
-#
 Colores = {
     "CYAN": "#00FFFF",
     "YELLOW": "#FFFF00",
@@ -23,10 +22,7 @@ Colores = {
     "ORANGE": "#FF7F00",
     "WHITE": "#FFFFFF",
     "BLACK": "#000000",
-    "RAINBOW": "#FFFFFF",
-    "DARK_GRAY": '#343434', # Gris oscuro para las celdas fijadas (Tetris)
-    "BRIGHT_GREEN": '#00FF00', # Verde brillante
-    "NORMAL_GREEN": '#33CC33', # Verde normal
+    "RAINBOW": "#FFFFFF"
 }
 Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
 
@@ -43,7 +39,36 @@ def eleccion_ponderada(items, pesos):
     tiro = random.randint(1, s)
     return items[bisect.bisect_left(acum, tiro)]
 
+
+
 class Juego:
+    def mostrar_notificacion_powerup(self, nombre_powerup):
+        if nombre_powerup == "SUPERBOMBA":
+            texto_notif = "Power Up:SUPERBOMBA"
+        elif nombre_powerup == "CLEAR_LINE_PIECE":
+            texto_notif = "Power Up:LIMPIA LINEAS"
+        elif nombre_powerup == "CLEAR_THREE_PIECE":
+            texto_notif = "Power Up:LIMPIA COLUMNAS"
+        elif nombre_powerup == "POWERUP":
+                    texto_notif = "Power Up:BOMBA"
+                    
+        notif = tk.Label(
+            self.root, 
+            text=texto_notif, 
+            font=("Consolas", 11, "bold"),
+            bg="#1e1e2e", 
+            fg="#00ff22", 
+            bd=2,
+            relief="solid",
+            padx=12, 
+            pady=6
+        )
+        
+        # Posicionar en la esquina superior derecha
+        notif.place(relx=0.95, rely=0.03, anchor="ne")
+
+        self.root.after(2500, notif.destroy)
+
     def __init__(self, datos_juego):
         self.frame = 0
         self.datos_juego = datos_juego
@@ -71,14 +96,14 @@ class Juego:
         self.canvas.pack(side=tk.LEFT, padx=10, pady=10)
 
         # Marco lateral para la puntuacion y controles
-        self.marco_score = tk.Frame(self.root, width=150, height=self.alto_canvas, bg='#222222')
+        self.marco_score = tk.Frame(self.root, width=150, height=self.alto_canvas, bg='#1e1e2e')
         self.marco_score.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10)
 
-        self.label_score = tk.Label(self.marco_score, text="PUNTUACION\n0", bg='#222222', fg='white', font=('Consolas', 16, 'bold'))
+        self.label_score = tk.Label(self.marco_score, text="PUNTUACION\n0", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 16, 'bold'))
         self.label_score.pack(pady=40, padx=10)
 
         # Nota: Se ha eliminado 'Q: Salir' de los controles en pantalla
-        self.label_controles = tk.Label(self.marco_score, text="CONTROLES\nFlechas: Mover/Rotar", bg='#222222', fg='gray', font=('Consolas', 10))
+        self.label_controles = tk.Label(self.marco_score, text="CONTROLES\nFlechas: Mover/Rotar", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 10))
         self.label_controles.pack(pady=20, padx=10)
 
         # Configurar eventos de teclado. Usamos <Key> para capturar cualquier tecla
@@ -91,8 +116,6 @@ class Juego:
             self.powerup_pendiente = False
             self._nombres_piezas = []
             self._pesos_piezas = []
-            self._acum_chances = []
-            SumaChances = 0
             for NombrePool in self.datos_juego['shapes'].keys():
                 if NombrePool == 'POWERUP':
                     continue
@@ -103,11 +126,6 @@ class Juego:
                     PesoPool = 10
                 self._nombres_piezas.append(NombrePool)
                 self._pesos_piezas.append(PesoPool)
-                SumaChances += PesoPool
-                self._acum_chances.append(SumaChances)
-            if SumaChances <= 0:
-                raise ValueError("Los pesos deben sumar > 0")
-            self._suma_chances = SumaChances
             self.pieza_x, self.pieza_y, self.pieza_rotacion = 0, 0, 0
             self.velocidad_gravedad = 0.4
 
@@ -175,7 +193,10 @@ class Juego:
         self.canvas.delete("all") # Borrar todo en cada frame
         self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
 
-
+        COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas (Tetris)
+        COLOR_SNAKE_CABEZA = '#00FF00' # Verde brillante
+        COLOR_SNAKE_CUERPO = '#33CC33' # Verde normal
+        COLOR_FOOD = '#FF0000'      # Rojo
 
         # 1. Dibujar la cuadricula estatica (grid base)
         for y in range(self.alto):
@@ -184,7 +205,7 @@ class Juego:
                     if self.rainbow_grid[y][x] == True:
                         color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
                     else:
-                        color = Colores.get("DARK_GRAY")
+                        color = COLOR_GRID_FIJA
                     self.dibujar_celda(x, y, color)
 
         # 2. Dibujar la pieza actual de Tetris
@@ -204,18 +225,18 @@ class Juego:
             # Comida
             if self.posicion_comida:
                 x, y = self.posicion_comida
-                self.dibujar_celda(x, y, Colores.get("RED"))
+                self.dibujar_celda(x, y, COLOR_FOOD)
             # Cuerpo de la Serpiente
             for i, segmento in enumerate(self.serpiente_cuerpo):
                 x, y = segmento
-                color = Colores.get("BRIGHT_GREEN") if i == 0 else Colores.get("NORMAL_GREEN")
+                color = COLOR_SNAKE_CABEZA if i == 0 else COLOR_SNAKE_CUERPO
                 self.dibujar_celda(x, y, color)
 
     def dibujar_celda(self, x, y, color):
         ts = self.taman_celda # Alias para taman de celda
         x1, y1 = x * ts, y * ts
         x2, y2 = x1 + ts, y1 + ts
-        self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline=Colores.get("BLACK"))
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline='#000000')
 
 
     def ejecutar_evento(self, nombre_evento):
@@ -242,23 +263,28 @@ class Juego:
     # ---------------------------------------------------------------------
 
     def tetris_spawn_pieza(self):
-        if self.powerup_pendiente and 'POWERUP' in self.datos_juego['shapes']:
-            nombre_pieza = 'POWERUP'
-            self.powerup_pendiente = False
+        if hasattr(self, 'siguiente_powerup') and self.siguiente_powerup:
+            nombre_pieza = self.siguiente_powerup
+            self.siguiente_powerup = None
         else:
-            # O(log n): acumulados precalculados en __init__, solo tiro + bisect.
-            tiro = random.randint(1, self._suma_chances)
-            idx = bisect.bisect_left(self._acum_chances, tiro)
-            nombre_pieza = self._nombres_piezas[idx]
+            nombre_pieza = eleccion_ponderada(self._nombres_piezas, self._pesos_piezas)
+        
+        self.pieza_nombre = nombre_pieza
+
         Datos = self.datos_juego['shapes'][nombre_pieza]
         if isinstance(Datos, dict):
             self.pieza_actual = Datos["estados"]
-            self.pieza_color = Colores.get(Datos.get("color","CYAN"), "#00FFFF")
+            # Asignamos el color original definido en la forma o RAINBOW
+            self.pieza_color = Colores.get(Datos.get("color", "CYAN"), "#00FFFF")
         else:
             self.pieza_actual = Datos
             self.pieza_color = "#00FFFF"
 
-        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho / 2 - 2, 0, 0
+        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho / 2 - 1, 0, 0
+        if self.tetris_verificar_colision(self.pieza_x, self.pieza_y, self.pieza_rotacion):
+            self.juego_terminado = True
+
+        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho / 2 - 1, 0, 0
         if self.tetris_verificar_colision(self.pieza_x, self.pieza_y, self.pieza_rotacion):
             self.juego_terminado = True
 
@@ -282,13 +308,81 @@ class Juego:
 
     def tetris_fijar_pieza(self):
         matriz_pieza = self.pieza_actual[self.pieza_rotacion]
-        for y_offset, fila in enumerate(matriz_pieza):
-            for x_offset, celda in enumerate(fila):
-                if celda == 1:
-                    if 0 <= self.pieza_y + y_offset < self.alto and 0 <= self.pieza_x + x_offset < self.ancho:
-                        self.grid[self.pieza_y + y_offset][self.pieza_x + x_offset] = 1
-                        if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
-                            self.rainbow_grid[self.pieza_y + y_offset][self.pieza_x + x_offset] = True
+
+        es_bomba = (getattr(self, 'pieza_nombre', '') == 'POWERUP')
+        es_limpia_filas = (getattr(self, 'pieza_nombre', '') == 'CLEAR_LINE_PIECE')
+        es_superbomba = (getattr(self, 'pieza_nombre', '') == 'SUPERBOMBA')
+        es_limpia_columnas = (getattr(self, 'pieza_nombre', '') == 'CLEAR_THREE_PIECE')
+
+        if es_bomba:
+            centro_x, centro_y = int(self.pieza_x), int(self.pieza_y)
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    nx, ny = centro_x + dx, centro_y + dy
+                    if 0 <= ny < self.alto and 0 <= nx < self.ancho:
+                        self.grid[ny][nx] = 0
+                        self.rainbow_grid[ny][nx] = False
+            self.puntuacion += 150
+        
+        elif es_superbomba:
+            base_x, base_y = int(self.pieza_x), int(self.pieza_y)
+
+            for dy in range(-1, 4):
+                for dx in range(-1, 4):
+                    nx = base_x + dx
+                    ny = base_y + dy
+                    if 0 <= ny < self.alto and 0 <= nx < self.ancho:
+                        self.grid[ny][nx] = 0
+                        self.rainbow_grid[ny][nx] = False
+            self.puntuacion += 350
+            
+        elif es_limpia_columnas:
+            columnas_a_borrar = set()
+            
+            for y_offset, fila in enumerate(matriz_pieza):
+                for x_offset, celda in enumerate(fila):
+                    if celda == 1:
+                        px = int(self.pieza_x + x_offset)
+                        if 0 <= px < self.ancho:
+                            columnas_a_borrar.add(px)
+
+            for px in columnas_a_borrar:
+                for py in range(self.alto):
+                    self.grid[py][px] = 0
+                    self.rainbow_grid[py][px] = False
+                    
+            self.puntuacion += len(columnas_a_borrar) * 250
+
+        elif es_limpia_filas:
+            filas_a_borrar = set()
+            for y_offset, fila in enumerate(matriz_pieza):
+                for x_offset, celda in enumerate(fila):
+                    if celda == 1:
+                        py = int(self.pieza_y + y_offset)
+                        if 0 <= py < self.alto:
+                            filas_a_borrar.add(py)
+
+            for py in filas_a_borrar:
+                self.grid[py] = [0] * self.ancho
+                self.rainbow_grid[py] = [False] * self.ancho
+
+            for py in sorted(list(filas_a_borrar)):
+                self.grid.pop(py)
+                self.grid.insert(0, [0] * self.ancho)
+                self.rainbow_grid.pop(py)
+                self.rainbow_grid.insert(0, [False] * self.ancho)
+
+            self.puntuacion += len(filas_a_borrar) * 200
+
+        else:
+            for y_offset, fila in enumerate(matriz_pieza):
+                for x_offset, celda in enumerate(fila):
+                    if celda == 1:
+                        px = int(self.pieza_x + x_offset)
+                        py = int(self.pieza_y + y_offset)
+                        if 0 <= py < self.alto and 0 <= px < self.ancho:
+                            self.grid[py][px] = 1
+
         self.pieza_actual = None
         self.tetris_limpiar_lineas()
         self.ejecutar_evento('ON_START')
@@ -316,8 +410,22 @@ class Juego:
         for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
         # TESTING: con 1 linea ya da premio (para entrega volver a >= 3 = triple).
         if lineas_limpias >= 1:
-            self.powerup_pendiente = True
-
+            eleccion = random.random()
+            if eleccion < 0.25:
+                self.siguiente_powerup = 'POWERUP'
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            elif eleccion > 0.25 and eleccion < 0.45:
+                self.siguiente_powerup = 'CLEAR_LINE_PIECE'
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            elif eleccion > 0.45 and eleccion < 0.65:
+                self.siguiente_powerup = 'SUPERBOMBA'
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            elif eleccion > 0.65 and eleccion < 0.80:
+                self.siguiente_powerup = "CLEAR_THREE_PIECE"
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            else:
+                self.siguiente_powerup = None
+                
     def snake_spawn_jugador(self, accion):
         coords = accion['params'][0] if accion['params'] else [self.ancho / 2, self.alto / 2]
         self.serpiente_cuerpo = [(coords[0], coords[1])]
@@ -369,21 +477,61 @@ class Juego:
     # -----------------------------------
 
     def mostrar_game_over(self):
-        # Muestra una ventana de mensaje de Tkinter
-        tkMessageBox.showinfo("Juego Terminado", "Puntuacion Final: " + str(self.puntuacion))
-        self.root.destroy()
-        sys.exit(0)
+        # Crear ventana emergente estilizada con Toplevel
+        top = tk.Toplevel(self.root)
+        top.title("Game Over")
+        top.geometry("320x200")
+        top.configure(bg="#1e1e2e")
+        top.resizable(False, False)
+        
+        top.transient(self.root)
+        
+        lbl_titulo = tk.Label(
+            top, 
+            text=u"FIN DEL JUEGO", 
+            font=("Consolas", 16, "bold"), 
+            fg="#03a80b", 
+            bg="#1e1e2e"
+        )
+        lbl_titulo.pack(pady=(25, 10))
+
+        lbl_score = tk.Label(
+            top, 
+            text="Puntuacion Final: {}".format(self.puntuacion), 
+            font=("Consolas", 12), 
+            fg="#03a80b", 
+            bg="#1e1e2e"
+        )
+        lbl_score.pack(pady=5)
+
+        btn_salir = tk.Button(
+            top, 
+            text="Aceptar", 
+            font=("Consolas", 10, "bold"),
+            bg="#03a80b", 
+            fg="#1e1e2e", 
+            activebackground="#027b08", 
+            activeforeground="#1e1e2e",
+            bd=0, 
+            padx=20, 
+            pady=5,
+            command=lambda: (self.root.destroy(), sys.exit(0))
+        )
+        btn_salir.pack(pady=20)
+        
+
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print "Uso: python runtime.py <archivo_juego.json>"
+        print ("Uso: python runtime.py <archivo_juego.json>")
         sys.exit(1)
     archivo_juego = sys.argv[1]
     try:
         with open(archivo_juego, 'r') as f:
             datos_juego = json.load(f)
     except IOError:
-        print "Error: No se pudo encontrar el archivo " + archivo_juego
+        print ("Error: No se pudo encontrar el archivo " + archivo_juego)
         sys.exit(1)
     juego = Juego(datos_juego)
     juego.run()

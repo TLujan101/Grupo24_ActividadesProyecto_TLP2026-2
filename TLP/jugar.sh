@@ -15,14 +15,14 @@ fi
 
 Pedir() {
     echo ""
-    echo " Elija un juego:"
+    echo " Menu de Juegos:"
     local i=1 f
     for f in "${Archivos[@]}"; do
         echo " $i) $(basename "$f" .brick)"
         i=$((i + 1))
     done
     echo ""
-    read -p "Elige un numero o nombre: " Juego
+    read -p "Seleciona un Numero o Nombre: " Juego
 }
 
 # Resuelve el .brick real a partir de un numero (1-N) o nombre (case-insensitive).
@@ -52,24 +52,24 @@ fi
 
 Brick=$(Resolver "$Juego")
 if [ -z "$Brick" ]; then
-    echo "Juego invalido: $Juego"
+    echo "Juego Invalido: $Juego"
     Pedir
     Brick=$(Resolver "$Juego")
     if [ -z "$Brick" ]; then
-        echo "Juego invalido. Abortando."
+        echo "Juego Invalido. Abortando."
         exit 1
     fi
 fi
 Json="${Brick%.brick}.json"
 
 # --- FASE 1: COMPILACION ---
-echo "Compilando el juego: $Brick..."
+echo "Compilando el Juego: $Brick..."
 echo "----------------------------------"
 "$PYTHON2" ./compiler.py "$Brick"
 if [ $? -ne 0 ]; then
     echo ""
-    echo "!!! Ocurrio un error durante la compilacion. !!!"
-    echo "Revisa los mensajes de error de arriba."
+    echo "!!! Ocurrio un Error Durante la Compilacion. !!!"
+    echo "Revisa los Mensajes de Error de Arriba."
     exit 1
 fi
 
@@ -81,4 +81,4 @@ echo "----------------------------------"
 "$PYTHON2" ./runtime.py "$Json"
 
 echo ""
-echo "El juego se ha cerrado."
+echo "El Juego se ha Cerrado."
