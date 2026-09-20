@@ -1,30 +1,16 @@
-Cambios en tetris.brick
+---------------------------------------  CAMBIOS CON RESPECTO A TETRIS.BRICK --------------------------------------- 
 
-> Se declara nueva forma posible ("O"):
+------------------------------ NUEVAS FORMAS BÁSICAS IMPLEMENTADAS ------------------------------
+
+>>>>>> Se declara nueva forma posible ("O"):
+
 DEFINE SHAPE O_PIECE COLOR YELLOW CHANCE 10:
   STATE 1:
     [1, 1]
     [1, 1]
 END
 
-> Se declara nueva forma de nombre POWERUP, su implementación esta directamente relacionada con el Power Up "Bomba".
-DEFINE SHAPE POWERUP COLOR RAINBOW CHANCE 0:
-    STATE 1:
-        [1]
-    END
-
-
-DEFINE SHAPE CLEAR_LINE_PIECE COLOR RAINBOW CHANCE 0:
-    STATE 1:
-        [1, 1]
-        [0, 0]
-    STATE 2:
-        [1, 0]
-        [1, 0]
-    STATE 3:
-        [0, 1]
-        [0, 1]
-END
+>>>>>> Se declara nueva forma posible con sus 4 estados ("S"):
 
 DEFINE SHAPE S_PIECE COLOR GREEN CHANCE 10:
   STATE 1:
@@ -43,8 +29,10 @@ DEFINE SHAPE S_PIECE COLOR GREEN CHANCE 10:
     [1, 0, 0]
     [1, 1, 0]
     [0, 1, 0]
-
 END
+
+>>>>>> Se declara nueva forma posible con sus 4 estados ("Z"):
+
 DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
   STATE 1:
     [1, 1, 0]
@@ -63,3 +51,150 @@ DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
     [1, 1, 0]
     [1, 0, 0]
 END
+
+------------------------------ NUEVAS FORMAS ESPECIALES IMPLEMENTADAS (POWER-UPS) ------------------------------
+
+>>>>>> Se declara nueva forma especial de nombre POWERUP:
+
+DEFINE SHAPE POWERUP COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1]
+END
+
+>>>>>> Se declara nueva forma especial de nombre CLEAR_LINE_PIECE:
+
+DEFINE SHAPE CLEAR_LINE_PIECE COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1]
+        [0, 0]
+    STATE 2:
+        [1, 0]
+        [1, 0]
+    STATE 3:
+        [0, 0]
+        [1, 1]
+    STATE 4:
+        [0, 1]
+        [0, 1]
+END
+
+>>>>>> Se declara nueva forma especial de nombre SUPERBOMBA:
+
+DEFINE SHAPE SUPERBOMBA COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1]
+        [1, 1]
+END
+
+>>>>>> Se declara nueva forma especial de nombre CLEAR_THREE_PIECE:
+
+DEFINE SHAPE CLEAR_THREE_PIECE COLOR RAINBOW CHANCE 0:
+    STATE 1:
+        [1, 1, 1]
+    STATE 2:
+        [1]
+        [1]
+        [1]
+END
+
+---------------------------------- NUEVAS LÓGICAS DE JUEGO -----------------------------------------
+
+>>>>>> Se agrega lógica para el power-up "Bomba" en el archivo tetris_reborn.brick:
+
+ON PIECE_LAND:
+    IF CURRENT_PIECE IS POWERUP:
+        EXPLODE_RADIUS 1
+        SPAWN RANDOM_SHAPE
+    END
+END
+
+>>>>>> Se implementó un sistema de elección aleatoria de Power-Up cuando la condición de aparición de este sea satisfecha.
+Hay una probabilidad de que no aparezca ningún Power-Up incluso con la condición de aparición satisfecha (runtime.py line 412-427):
+
+if lineas_limpias >= 1:
+            eleccion = random.random()
+            if eleccion < 0.25:
+                self.siguiente_powerup = 'POWERUP'
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            elif eleccion > 0.25 and eleccion < 0.45:
+                self.siguiente_powerup = 'CLEAR_LINE_PIECE'
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            elif eleccion > 0.45 and eleccion < 0.65:
+                self.siguiente_powerup = 'SUPERBOMBA'
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            elif eleccion > 0.65 and eleccion < 0.80:
+                self.siguiente_powerup = "CLEAR_THREE_PIECE"
+                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            else:
+                self.siguiente_powerup = None
+
+
+>>>>>> Se añaden a runtime.py las funciones especiales (radio de explosión y limpiar filas/columnas) de cada uno de los Power-Up (runtime.py line 309-388):
+
+>>>>>> Se añade el cálculo de Probabilidad Ponderada haciendo uso de la librería Bisect (runtime.py line 29-40):
+
+def eleccion_ponderada(items, pesos):
+    if len(items) != len(pesos):
+        raise ValueError("items y pesos deben tener la misma longitud")
+    acum = []
+    s = 0
+    for w in pesos:
+        s += w
+        acum.append(s)
+    if s <= 0:
+        raise ValueError("Los pesos deben sumar > 0")
+    tiro = random.randint(1, s)
+    return items[bisect.bisect_left(acum, tiro)]
+
+------------------------------ CAMBIOS EN ARCHIVOS DE EJECUCION ------------------------------ 
+
+>>>>>> Se modifica el archivo jugar.bat para añadir un menú interactivo que enumera los juegos disponibles 
+y pide como valor de entrada un número correspondiente a uno de los juegos disponibles o directamente 
+el nombre de alguno de los juegos para facilitar el manejo de los mismos:
+
+[:Pedir
+echo.
+echo  Menu de Juegos:
+for /L %%i in (1,1,!Count!) do (
+    echo  %%i^) !Game_%%i!
+)
+echo.
+set "Juego="
+set /p Juego="Selecciona un Numero o Nombre: "
+goto :eof]
+
+------------------------------ CAMBIOS DE COLORES, ESTÉTICA DEL PROGRAMA Y SUS COMPONENTES ------------------------------ 
+
+>>>>>> Se añaden códigos de colores básicos en el archivo runtime.py y se añade la lista de colores "Arcoiris":
+
+Colores = {
+    "CYAN": "#00FFFF",
+    "YELLOW": "#FFFF00",
+    "PURPLE": "#AA00FF",
+    "GREEN": "#00FF00",
+    "RED": "#FF0000",
+    "BLUE": "#0000FF",
+    "ORANGE": "#FF7F00",
+    "WHITE": "#FFFFFF",
+    "BLACK": "#000000",
+    "RAINBOW": "#FFFFFF"
+}
+Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
+
+>>>>>> La estética de la ventana emergente en la que se ejecutan los juegos fue modificada (runtime.py line 479-520): 
+Se ha cambiado el color de fondo a uno más oscuro (#1e1e2e) y el color del texto a uno más brillante (#03a80b). 
+
+------------------------------ UTILIDADES ------------------------------ 
+
+>>>>>> Se añadió una función que facilita la identificación de cada Power-Up al mostrar una notificación que indica el nombre del 
+Power-Up que apareció al aparecer este en la zona de juego (runtime.py):
+
+def mostrar_notificacion_powerup(self, nombre_powerup):
+        if nombre_powerup == "SUPERBOMBA":
+            texto_notif = "Power Up:SUPERBOMBA"
+        elif nombre_powerup == "CLEAR_LINE_PIECE":
+            texto_notif = "Power Up:LIMPIA LINEAS"
+        elif nombre_powerup == "CLEAR_THREE_PIECE":
+            texto_notif = "Power Up:LIMPIA COLUMNAS"
+        elif nombre_powerup == "POWERUP":
+            texto_notif = "Power Up:BOMBA"
