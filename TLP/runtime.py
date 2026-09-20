@@ -102,16 +102,24 @@ class Juego:
 
         self.root.bind('<Key>', self.manejar_input_gui)
         
-        self.btn_sonido = tk.Button(
-            self.root, 
-            text="Audio: ON", 
-            command=self.toggle_audio,
-            font=("CONSOLAS", 10, "bold")
-        )
-        self.btn_sonido.pack(pady=4) 
+        self.tipo_juego = self.datos_juego.get('tipo_juego', 'TETRIS') #Retrocompatibilidad
+        self.es_reborn = (self.tipo_juego == 'TETRIS_REBORN') #Retrocompatibilidad
         
-        self.audio = GestorAudioNativo("songs")
-        self.audio.reproducir_musica_fondo("ost_tetris.wav")
+        if self.es_reborn: #Retrocompatibilidad
+            self.audio = GestorAudioNativo(carpeta_sonidos="songs")
+            
+            self.btn_sonido = tk.Button(
+                self.root, 
+                text="Audio: ON", 
+                command=self.toggle_audio
+            )
+            self.btn_sonido.pack(pady=5)
+            
+            self.audio.reproducir_musica_fondo("ost_tetris.wav")
+        else:
+            self.audio = None
+        
+
 
         if self.tipo_juego == 'TETRIS':
             self.pieza_actual = None
@@ -412,31 +420,49 @@ class Juego:
                         return True
         return False
 
-    # --- MODIFICADO: Solo detecta filas completas e inicia la animación ---
+    # Animación
     def tetris_limpiar_lineas(self):
         Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]
         if len(Llenas) == 0:
             return
 
-        # Guardar índices para la animación y reiniciar contador
+        if not self.es_reborn:
+            self.aplicar_borrado_lineas()
+            return
+
+        # --- MODO REBORN: Guardar índices para la animación y reiniciar contador ---
         self.lineas_animandose = Llenas
         self.frames_animacion_lineas = 0
 
     def aplicar_borrado_lineas(self):
-        # Si la lista contiene tuplas (x, y), proviene de Bombas o Limpia Columnas
+
+        if not self.es_reborn:
+            filas_llenas = [y for y in range(self.alto) if all(self.grid[y])]
+            if filas_llenas:
+                filas_restantes = [fila for y, fila in enumerate(self.grid) if y not in filas_llenas]
+                filas_nuevas = [[0] * self.ancho for _ in range(len(filas_llenas))]
+                self.grid = filas_nuevas + filas_restantes
+                
+                for _ in filas_llenas:
+                    self.ejecutar_evento('ON_LINE_CLEAR')
+
+            self.lineas_animandose = []
+            self.ejecutar_evento('ON_START')
+            return
+
         if self.lineas_animandose and isinstance(self.lineas_animandose[0], tuple):
             for cx, cy in self.lineas_animandose:
                 if 0 <= cy < self.alto and 0 <= cx < self.ancho:
                     self.grid[cy][cx] = 0
                     self.rainbow_grid[cy][cx] = False
 
-        # De lo contrario, son enteros de filas (por Tetris estándar o Limpia Filas)
         else:
             Llenas = self.lineas_animandose
             lineas_limpias = len(Llenas)
 
             if lineas_limpias > 0:
                 Bonus = sum(1 for i in Llenas for x in range(self.ancho) if self.rainbow_grid[i][x])
+                
                 self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [
                     fila for i, fila in enumerate(self.grid) if i not in Llenas
                 ]
@@ -444,10 +470,11 @@ class Juego:
                     fila for i, fila in enumerate(self.rainbow_grid) if i not in Llenas
                 ]
 
-                for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
-                for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
+                for _ in range(lineas_limpias): 
+                    self.ejecutar_evento('ON_LINE_CLEAR')
+                for _ in range(Bonus): 
+                    self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
 
-                # Probabilidad de otorgar Power-Up al limpiar líneas
                 eleccion = random.random()
                 if eleccion < 0.25:
                     self.siguiente_powerup = 'POWERUP'
@@ -464,7 +491,6 @@ class Juego:
                 else:
                     self.siguiente_powerup = None
 
-        # Reiniciar la lista de animación y solicitar nueva pieza
         self.lineas_animandose = []
         self.ejecutar_evento('ON_START')
 
