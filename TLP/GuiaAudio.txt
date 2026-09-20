@@ -1,0 +1,93 @@
+========================================================================
+ GUÍA RÁPIDA: SISTEMA DE AUDIO NATIVO Y EVENTOS DEL JUEGO
+========================================================================
+
+1. ESTRUCTURA Y UBICACIÓN DE ARCHIVOS
+------------------------------------------------------------------------
+Todos los archivos de sonido deben guardarse en formato .WAV en la 
+carpeta 'songs' ubicada en la raíz del proyecto:
+
+  TLP/
+  ├── songs/
+  │   ├── ost_tetris.wav       (Música de fondo)
+  │   ├── explosion.wav        (Efectos)
+  │   ├── linea_clear.wav
+  │   └── game_over.wav
+  ├── audio.py
+  └── runtime.py
+
+REQUISITO OBLIGATORIO DEL FORMATO .WAV:
+- Deben ser archivos WAV PCM Firmado de 16-bit (44.1 kHz).
+- No renombrar archivos .MP3 a .WAV directamente, ya que fallarán en 
+  el reproductor nativo del sistema.
+
+
+2. MÉTODOS PRINCIPALES DE GestorAudioNativo
+------------------------------------------------------------------------
+La instancia del gestor de audio se accede desde tu clase principal 
+como 'self.audio'.
+
+* Reproducir música de fondo (en bucle infinito):
+    self.audio.reproducir_musica_fondo("ost_tetris.wav")
+
+* Reproducir un efecto de sonido (no interrumpe la música):
+    self.audio.reproducir_efecto("explosion.wav")
+
+* Detener la música actual de inmediato:
+    self.audio.detener_musica()
+
+* Alternar Mute / Unmute (Silenciar / Activar todo):
+    self.audio.alternar_silencio()
+
+
+3. CÓMO AÑADIR EFECTOS A NUEVOS EVENTOS
+------------------------------------------------------------------------
+Para vincular un sonido a una acción en el juego, simplemente llama a 
+'self.audio.reproducir_efecto("nombre.wav")' dentro del método que 
+procesa el evento.
+
+A. En el sistema de eventos genérico (ej. ejecutar_evento):
+    def ejecutar_evento(self, evento):
+        if evento == 'ON_LINE_CLEAR':
+            self.audio.reproducir_efecto("linea_clear.wav")
+
+B. En la rotación de piezas (tetris_rotar_pieza):
+    def tetris_rotar_pieza(self):
+        # ... lógica de rotación ...
+        if rotacion_exitosa:
+            self.audio.reproducir_efecto("rotar.wav")
+
+C. En la fijación e impacto de Power-Ups (tetris_fijar_pieza):
+    def tetris_fijar_pieza(self):
+        # ...
+        if es_bomba or es_megabomba:
+            self.audio.reproducir_efecto("explosion.wav")
+        elif es_cruz or es_megacruz:
+            self.audio.reproducir_efecto("powerup.wav")
+
+D. Al perder la partida (procesar_game_over):
+    def procesar_game_over(self):
+        self.game_over = True
+        self.audio.detener_musica()
+        self.audio.reproducir_efecto("game_over.wav")
+
+
+4. INTEGRACIÓN CON BOTÓN EN TKINTER
+------------------------------------------------------------------------
+Para vincular el botón Mute/Unmute de la interfaz gráfica:
+
+  self.btn_sonido = tk.Button(
+      self.root, 
+      text="Audio: ON", 
+      command=self.toggle_audio
+  )
+
+  def toggle_audio(self):
+      silenciado = self.audio.alternar_silencio()
+      if silenciado:
+          self.btn_sonido.config(text="Audio: OFF")
+      else:
+          self.btn_sonido.config(text="Audio: ON")
+          if not self.juego_terminado:
+              self.audio.reproducir_musica_fondo("ost_tetris.wav")
+========================================================================
