@@ -6,12 +6,10 @@ import json
 import time
 import random
 import bisect
-# Tkinter es la libreria GUI estandar de Python, compatible con 2.7
-import Tkinter as tk
-import tkMessageBox # Necesario para el GAME OVER
-# Quitamos os y msvcrt ya que la GUI maneja el dibujo y el input
-# import os
-# import msvcrt
+import Tkinter as tk # type: ignore
+import tkMessageBox # type: ignore
+from audio import GestorAudioNativo
+
 Colores = {
     "CYAN": "#00FFFF",
     "YELLOW": "#FFFF00",
@@ -40,7 +38,6 @@ def eleccion_ponderada(items, pesos):
     return items[bisect.bisect_left(acum, tiro)]
 
 
-
 class Juego:
     def mostrar_notificacion_powerup(self, nombre_powerup):
         if nombre_powerup == "SUPERBOMBA":
@@ -50,7 +47,7 @@ class Juego:
         elif nombre_powerup == "CLEAR_THREE_PIECE":
             texto_notif = "Power Up:LIMPIA COLUMNAS"
         elif nombre_powerup == "POWERUP":
-                    texto_notif = "Power Up:BOMBA"
+            texto_notif = "Power Up:BOMBA"
                     
         notif = tk.Label(
             self.root, 
@@ -64,9 +61,7 @@ class Juego:
             pady=6
         )
         
-        # Posicionar en la esquina superior derecha
         notif.place(relx=0.95, rely=0.03, anchor="ne")
-
         self.root.after(2500, notif.destroy)
 
     def __init__(self, datos_juego):
@@ -81,38 +76,46 @@ class Juego:
         self.puntuacion = 0
         self.juego_terminado = False
 
-        # --- Configuracion de la GUI ---
+        self.lineas_animandose = []       #Lista de índices de filas a eliminar
+        self.frames_animacion_lineas = 0   #Contador de frames
+        self.max_frames_animacion = 6     #Duración de la animación en frames
+
         self.root = tk.Tk()
         self.root.title("BrickScript - " + self.tipo_juego)
-        # Configurar la accion al cerrar la ventana ('X' de la barra de titulo)
         self.root.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
 
-        self.taman_celda = 25 # Pixeles por celda
+        self.taman_celda = 25 
         self.ancho_canvas = self.ancho * self.taman_celda
         self.alto_canvas = self.alto * self.taman_celda
 
-        # Canvas para dibujar el juego
         self.canvas = tk.Canvas(self.root, width=self.ancho_canvas, height=self.alto_canvas, bg='#111111')
         self.canvas.pack(side=tk.LEFT, padx=10, pady=10)
 
-        # Marco lateral para la puntuacion y controles
         self.marco_score = tk.Frame(self.root, width=150, height=self.alto_canvas, bg='#1e1e2e')
         self.marco_score.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10)
 
         self.label_score = tk.Label(self.marco_score, text="PUNTUACION\n0", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 16, 'bold'))
         self.label_score.pack(pady=40, padx=10)
 
-        # Nota: Se ha eliminado 'Q: Salir' de los controles en pantalla
         self.label_controles = tk.Label(self.marco_score, text="CONTROLES\nFlechas: Mover/Rotar", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 10))
         self.label_controles.pack(pady=20, padx=10)
 
-        # Configurar eventos de teclado. Usamos <Key> para capturar cualquier tecla
         self.root.bind('<Key>', self.manejar_input_gui)
+        
+        self.btn_sonido = tk.Button(
+            self.root, 
+            text="Audio: ON", 
+            command=self.toggle_audio,
+            font=("CONSOLAS", 10, "bold")
+        )
+        self.btn_sonido.pack(pady=4) 
+        
+        self.audio = GestorAudioNativo("songs")
+        self.audio.reproducir_musica_fondo("ost_tetris.wav")
 
         if self.tipo_juego == 'TETRIS':
             self.pieza_actual = None
             self.pieza_color = "#00FFFF"
-            # Premio garantizado: pasa a True al limpiar, el proximo spawn es POWERUP.
             self.powerup_pendiente = False
             self._nombres_piezas = []
             self._pesos_piezas = []
@@ -137,10 +140,20 @@ class Juego:
 
         self.timer_gravedad = 0
         self.ejecutar_evento('ON_START')
-        self.timer_id = None # Para controlar el loop de Tkinter
+        self.timer_id = None 
+        
+    def toggle_audio(self):
+        es_silencioso = self.audio.alternar_silencio()
+        if es_silencioso:
+            self.btn_sonido.config(text="Audio: OFF")
+            
+        else:
+            self.btn_sonido.config(text="Audio: ON")
+            self.audio = GestorAudioNativo("songs")
+            self.audio.reproducir_musica_fondo("ost_tetris.wav")
+
 
     def run(self):
-        # Inicia el ciclo principal de juego de Tkinter
         self.root.after(50, self.game_loop)
         self.root.mainloop()
 
@@ -149,95 +162,99 @@ class Juego:
             self.mostrar_game_over()
             return
 
-        # Logica de TICK/Gravedad
-        # El loop se ejecuta cada 50ms (0.05 segundos)
-        self.timer_gravedad += 0.05
+        if self.lineas_animandose:
+            self.frames_animacion_lineas = self.frames_animacion_lineas + 1
+            if self.frames_animacion_lineas >= self.max_frames_animacion:
+                self.aplicar_borrado_lineas()
+            self.dibujar()
+            self.timer_id = self.root.after(50, self.game_loop)
+            return 
+
+        self.timer_gravedad = self.timer_gravedad + 0.05
         if self.timer_gravedad >= self.velocidad_gravedad:
             self.timer_gravedad = 0
             self.ejecutar_evento('ON_TICK')
 
         self.dibujar()
-
-        # Programa el siguiente ciclo de juego
         self.timer_id = self.root.after(50, self.game_loop)
 
     def cerrar_ventana(self):
-        # Detiene el loop de juego de forma segura
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
         self.root.destroy()
         sys.exit(0)
 
-
     def manejar_input_gui(self, event):
+        #Bloquear controles mientras se reproduce la animación de borrado
+        if self.lineas_animandose:
+            return
+
         key = event.keysym.upper()
 
-        # La opcion de salir con 'Q' ha sido eliminada.
-
-        # Mapeo de teclas de flecha
         if self.tipo_juego == 'TETRIS':
             if key == 'UP': self.ejecutar_evento('ON_KEY_UP')
             elif key == 'DOWN': self.ejecutar_evento('ON_KEY_DOWN')
             elif key == 'LEFT': self.ejecutar_evento('ON_KEY_LEFT')
             elif key == 'RIGHT': self.ejecutar_evento('ON_KEY_RIGHT')
         elif self.tipo_juego == 'SNAKE':
-            # Llamamos a las funciones internas para Snake
             if key == 'UP': self.snake_cambiar_direccion('UP')
             elif key == 'DOWN': self.snake_cambiar_direccion('DOWN')
             elif key == 'LEFT': self.snake_cambiar_direccion('LEFT')
             elif key == 'RIGHT': self.snake_cambiar_direccion('RIGHT')
 
-
     def dibujar(self):
-        self.frame += 1
-        self.canvas.delete("all") # Borrar todo en cada frame
-        self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
+            self.frame += 1
+            self.canvas.delete("all") 
+            self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
 
-        COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas (Tetris)
-        COLOR_SNAKE_CABEZA = '#00FF00' # Verde brillante
-        COLOR_SNAKE_CUERPO = '#33CC33' # Verde normal
-        COLOR_FOOD = '#FF0000'      # Rojo
+            COLOR_GRID_FIJA = '#343434' 
+            COLOR_SNAKE_CABEZA = '#00FF00' 
+            COLOR_SNAKE_CUERPO = '#33CC33' 
+            COLOR_FOOD = '#FF0000'      
 
-        # 1. Dibujar la cuadricula estatica (grid base)
-        for y in range(self.alto):
-            for x in range(self.ancho):
-                if self.grid[y][x] == 1:
-                    if self.rainbow_grid[y][x] == True:
-                        color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
-                    else:
-                        color = COLOR_GRID_FIJA
-                    self.dibujar_celda(x, y, color)
-
-        # 2. Dibujar la pieza actual de Tetris
-        if self.tipo_juego == 'TETRIS' and self.pieza_actual:
-            matriz_pieza = self.pieza_actual[self.pieza_rotacion]
-            for y_offset, fila in enumerate(matriz_pieza):
-                for x_offset, celda in enumerate(fila):
-                    if celda == 1:
-                        if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
+            for y in range(self.alto):
+                for x in range(self.ancho):
+                    if self.grid[y][x] == 1:
+                        # Verifica si la celda (x, y) o la fila 'y' está en proceso de animación
+                        if (x, y) in self.lineas_animandose or y in self.lineas_animandose:
+                            if self.frames_animacion_lineas % 2 == 0:
+                                color = '#FFFFFF'
+                            else:
+                                color = '#555555'
+                        elif self.rainbow_grid[y][x]:
                             color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
                         else:
-                            color = self.pieza_color
-                        self.dibujar_celda(self.pieza_x + x_offset, self.pieza_y + y_offset, color)
+                            color = COLOR_GRID_FIJA
 
-        # 3. Dibujar Snake y Comida
-        if self.tipo_juego == 'SNAKE':
-            # Comida
-            if self.posicion_comida:
-                x, y = self.posicion_comida
-                self.dibujar_celda(x, y, COLOR_FOOD)
-            # Cuerpo de la Serpiente
-            for i, segmento in enumerate(self.serpiente_cuerpo):
-                x, y = segmento
-                color = COLOR_SNAKE_CABEZA if i == 0 else COLOR_SNAKE_CUERPO
-                self.dibujar_celda(x, y, color)
+                        self.dibujar_celda(x, y, color)
+
+            # 2. Dibujar la pieza actual de Tetris
+            if self.tipo_juego == 'TETRIS' and self.pieza_actual and not self.lineas_animandose:
+                matriz_pieza = self.pieza_actual[self.pieza_rotacion]
+                for y_offset, fila in enumerate(matriz_pieza):
+                    for x_offset, celda in enumerate(fila):
+                        if celda == 1:
+                            if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
+                                color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
+                            else:
+                                color = self.pieza_color
+                            self.dibujar_celda(self.pieza_x + x_offset, self.pieza_y + y_offset, color)
+
+            # 3. Dibujar Snake y Comida
+            if self.tipo_juego == 'SNAKE':
+                if self.posicion_comida:
+                    x, y = self.posicion_comida
+                    self.dibujar_celda(x, y, COLOR_FOOD)
+                for i, segmento in enumerate(self.serpiente_cuerpo):
+                    x, y = segmento
+                    color = COLOR_SNAKE_CABEZA if i == 0 else COLOR_SNAKE_CUERPO
+                    self.dibujar_celda(x, y, color)
 
     def dibujar_celda(self, x, y, color):
-        ts = self.taman_celda # Alias para taman de celda
+        ts = self.taman_celda 
         x1, y1 = x * ts, y * ts
         x2, y2 = x1 + ts, y1 + ts
         self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline='#000000')
-
 
     def ejecutar_evento(self, nombre_evento):
         if nombre_evento in self.datos_juego['events']:
@@ -259,9 +276,6 @@ class Juego:
                     if verbo == 'GROW': self.snake_crecer()
 
 
-    # METODOS DE LOGICA DE JUEGO (MANTENIDOS DEL ARCHIVO ORIGINAL)
-    # ---------------------------------------------------------------------
-
     def tetris_spawn_pieza(self):
         if hasattr(self, 'siguiente_powerup') and self.siguiente_powerup:
             nombre_pieza = self.siguiente_powerup
@@ -274,7 +288,6 @@ class Juego:
         Datos = self.datos_juego['shapes'][nombre_pieza]
         if isinstance(Datos, dict):
             self.pieza_actual = Datos["estados"]
-            # Asignamos el color original definido en la forma o RAINBOW
             self.pieza_color = Colores.get(Datos.get("color", "CYAN"), "#00FFFF")
         else:
             self.pieza_actual = Datos
@@ -284,12 +297,8 @@ class Juego:
         if self.tetris_verificar_colision(self.pieza_x, self.pieza_y, self.pieza_rotacion):
             self.juego_terminado = True
 
-        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho / 2 - 1, 0, 0
-        if self.tetris_verificar_colision(self.pieza_x, self.pieza_y, self.pieza_rotacion):
-            self.juego_terminado = True
-
     def tetris_mover_pieza(self, direccion):
-        if not self.pieza_actual: return
+        if not self.pieza_actual or self.lineas_animandose: return
         dx, dy = 0, 0
         if direccion == 'LEFT': dx = -1
         elif direccion == 'RIGHT': dx = 1
@@ -301,7 +310,7 @@ class Juego:
             self.tetris_fijar_pieza()
 
     def tetris_rotar_pieza(self):
-        if not self.pieza_actual: return
+        if not self.pieza_actual or self.lineas_animandose: return
         nueva_rotacion = (self.pieza_rotacion + 1) % len(self.pieza_actual)
         if not self.tetris_verificar_colision(self.pieza_x, self.pieza_y, nueva_rotacion):
             self.pieza_rotacion = nueva_rotacion
@@ -316,29 +325,34 @@ class Juego:
 
         if es_bomba:
             centro_x, centro_y = int(self.pieza_x), int(self.pieza_y)
+            celdas_afectadas = []
             for dy in range(-1, 2):
                 for dx in range(-1, 2):
                     nx, ny = centro_x + dx, centro_y + dy
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
-                        self.grid[ny][nx] = 0
-                        self.rainbow_grid[ny][nx] = False
+                        if self.grid[ny][nx] == 1:
+                            celdas_afectadas.append((nx, ny))
+                            
+            self.lineas_animandose = celdas_afectadas
+            self.frames_animacion_lineas = 0
             self.puntuacion += 150
-        
+
         elif es_superbomba:
             base_x, base_y = int(self.pieza_x), int(self.pieza_y)
-
+            celdas_afectadas = []
             for dy in range(-1, 4):
                 for dx in range(-1, 4):
-                    nx = base_x + dx
-                    ny = base_y + dy
+                    nx, ny = base_x + dx, base_y + dy
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
-                        self.grid[ny][nx] = 0
-                        self.rainbow_grid[ny][nx] = False
+                        if self.grid[ny][nx] == 1:
+                            celdas_afectadas.append((nx, ny))
+
+            self.lineas_animandose = celdas_afectadas
+            self.frames_animacion_lineas = 0
             self.puntuacion += 350
             
         elif es_limpia_columnas:
             columnas_a_borrar = set()
-            
             for y_offset, fila in enumerate(matriz_pieza):
                 for x_offset, celda in enumerate(fila):
                     if celda == 1:
@@ -346,11 +360,14 @@ class Juego:
                         if 0 <= px < self.ancho:
                             columnas_a_borrar.add(px)
 
+            celdas_afectadas = []
             for px in columnas_a_borrar:
                 for py in range(self.alto):
-                    self.grid[py][px] = 0
-                    self.rainbow_grid[py][px] = False
+                    if self.grid[py][px] == 1:
+                        celdas_afectadas.append((px, py))
                     
+            self.lineas_animandose = celdas_afectadas
+            self.frames_animacion_lineas = 0
             self.puntuacion += len(columnas_a_borrar) * 250
 
         elif es_limpia_filas:
@@ -362,16 +379,8 @@ class Juego:
                         if 0 <= py < self.alto:
                             filas_a_borrar.add(py)
 
-            for py in filas_a_borrar:
-                self.grid[py] = [0] * self.ancho
-                self.rainbow_grid[py] = [False] * self.ancho
-
-            for py in sorted(list(filas_a_borrar)):
-                self.grid.pop(py)
-                self.grid.insert(0, [0] * self.ancho)
-                self.rainbow_grid.pop(py)
-                self.rainbow_grid.insert(0, [False] * self.ancho)
-
+            self.lineas_animandose = list(filas_a_borrar)
+            self.frames_animacion_lineas = 0
             self.puntuacion += len(filas_a_borrar) * 200
 
         else:
@@ -384,8 +393,13 @@ class Juego:
                             self.grid[py][px] = 1
 
         self.pieza_actual = None
-        self.tetris_limpiar_lineas()
-        self.ejecutar_evento('ON_START')
+        
+        # Si no hubo un powerup activado, verificamos lineas normales
+        if not self.lineas_animandose:
+            self.tetris_limpiar_lineas()
+        
+        if not self.lineas_animandose:
+            self.ejecutar_evento('ON_START')
 
     def tetris_verificar_colision(self, x, y, rotacion):
         if not self.pieza_actual: return False
@@ -398,34 +412,63 @@ class Juego:
                         return True
         return False
 
+    # --- MODIFICADO: Solo detecta filas completas e inicia la animación ---
     def tetris_limpiar_lineas(self):
         Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]
-        lineas_limpias = len(Llenas)
-        if lineas_limpias == 0:
+        if len(Llenas) == 0:
             return
-        Bonus = sum(1 for i in Llenas for x in range(self.ancho) if self.rainbow_grid[i][x])
-        self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.grid) if i not in Llenas]
-        self.rainbow_grid = [[False] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.rainbow_grid) if i not in Llenas]
-        for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
-        for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
-        # TESTING: con 1 linea ya da premio (para entrega volver a >= 3 = triple).
-        if lineas_limpias >= 1:
-            eleccion = random.random()
-            if eleccion < 0.25:
-                self.siguiente_powerup = 'POWERUP'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.25 and eleccion < 0.45:
-                self.siguiente_powerup = 'CLEAR_LINE_PIECE'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.45 and eleccion < 0.65:
-                self.siguiente_powerup = 'SUPERBOMBA'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.65 and eleccion < 0.80:
-                self.siguiente_powerup = "CLEAR_THREE_PIECE"
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            else:
-                self.siguiente_powerup = None
-                
+
+        # Guardar índices para la animación y reiniciar contador
+        self.lineas_animandose = Llenas
+        self.frames_animacion_lineas = 0
+
+    def aplicar_borrado_lineas(self):
+        # Si la lista contiene tuplas (x, y), proviene de Bombas o Limpia Columnas
+        if self.lineas_animandose and isinstance(self.lineas_animandose[0], tuple):
+            for cx, cy in self.lineas_animandose:
+                if 0 <= cy < self.alto and 0 <= cx < self.ancho:
+                    self.grid[cy][cx] = 0
+                    self.rainbow_grid[cy][cx] = False
+
+        # De lo contrario, son enteros de filas (por Tetris estándar o Limpia Filas)
+        else:
+            Llenas = self.lineas_animandose
+            lineas_limpias = len(Llenas)
+
+            if lineas_limpias > 0:
+                Bonus = sum(1 for i in Llenas for x in range(self.ancho) if self.rainbow_grid[i][x])
+                self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [
+                    fila for i, fila in enumerate(self.grid) if i not in Llenas
+                ]
+                self.rainbow_grid = [[False] * self.ancho for _ in range(lineas_limpias)] + [
+                    fila for i, fila in enumerate(self.rainbow_grid) if i not in Llenas
+                ]
+
+                for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
+                for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
+
+                # Probabilidad de otorgar Power-Up al limpiar líneas
+                eleccion = random.random()
+                if eleccion < 0.25:
+                    self.siguiente_powerup = 'POWERUP'
+                    self.mostrar_notificacion_powerup(self.siguiente_powerup)
+                elif 0.25 <= eleccion < 0.45:
+                    self.siguiente_powerup = 'CLEAR_LINE_PIECE'
+                    self.mostrar_notificacion_powerup(self.siguiente_powerup)
+                elif 0.45 <= eleccion < 0.65:
+                    self.siguiente_powerup = 'SUPERBOMBA'
+                    self.mostrar_notificacion_powerup(self.siguiente_powerup)
+                elif 0.65 <= eleccion < 0.80:
+                    self.siguiente_powerup = "CLEAR_THREE_PIECE"
+                    self.mostrar_notificacion_powerup(self.siguiente_powerup)
+                else:
+                    self.siguiente_powerup = None
+
+        # Reiniciar la lista de animación y solicitar nueva pieza
+        self.lineas_animandose = []
+        self.ejecutar_evento('ON_START')
+
+
     def snake_spawn_jugador(self, accion):
         coords = accion['params'][0] if accion['params'] else [self.ancho / 2, self.alto / 2]
         self.serpiente_cuerpo = [(coords[0], coords[1])]
@@ -472,12 +515,7 @@ class Juego:
     def snake_crecer(self):
         pass
 
-
-    # METODOS DE SALIDA (ADAPTADOS A GUI)
-    # -----------------------------------
-
     def mostrar_game_over(self):
-        # Crear ventana emergente estilizada con Toplevel
         top = tk.Toplevel(self.root)
         top.title("Game Over")
         top.geometry("320x200")
@@ -518,8 +556,6 @@ class Juego:
             command=lambda: (self.root.destroy(), sys.exit(0))
         )
         btn_salir.pack(pady=20)
-        
-
 
 
 if __name__ == "__main__":
