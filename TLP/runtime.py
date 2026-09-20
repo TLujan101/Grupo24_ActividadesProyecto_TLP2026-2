@@ -68,6 +68,7 @@ class Juego:
         self.frame = 0
         self.datos_juego = datos_juego
         self.tipo_juego = self.datos_juego.get('tipo_juego', 'TETRIS')
+        self.es_reborn = (self.tipo_juego == 'TETRIS_REBORN') #Retrocompatibilidad
         config = self.datos_juego.get('config', {})
         self.ancho = config.get('grid_size', [10, 20])[0]
         self.alto = config.get('grid_size', [10, 20])[1]
@@ -102,8 +103,7 @@ class Juego:
 
         self.root.bind('<Key>', self.manejar_input_gui)
         
-        self.tipo_juego = self.datos_juego.get('tipo_juego', 'TETRIS') #Retrocompatibilidad
-        self.es_reborn = (self.tipo_juego == 'TETRIS_REBORN') #Retrocompatibilidad
+
         
         if self.es_reborn: #Retrocompatibilidad
             self.audio = GestorAudioNativo(carpeta_sonidos="songs")
@@ -121,7 +121,7 @@ class Juego:
         
 
 
-        if self.tipo_juego == 'TETRIS':
+        if self.tipo_juego == 'TETRIS' or self.tipo_juego == "TETRIS_REBORN":
             self.pieza_actual = None
             self.pieza_color = "#00FFFF"
             self.powerup_pendiente = False
@@ -139,6 +139,7 @@ class Juego:
                 self._pesos_piezas.append(PesoPool)
             self.pieza_x, self.pieza_y, self.pieza_rotacion = 0, 0, 0
             self.velocidad_gravedad = 0.4
+#TETRIS
 
         if self.tipo_juego == 'SNAKE':
             self.serpiente_cuerpo = []
@@ -199,7 +200,7 @@ class Juego:
 
         key = event.keysym.upper()
 
-        if self.tipo_juego == 'TETRIS':
+        if self.tipo_juego == 'TETRIS'or self.tipo_juego == 'TETRIS_REBORN':
             if key == 'UP': self.ejecutar_evento('ON_KEY_UP')
             elif key == 'DOWN': self.ejecutar_evento('ON_KEY_DOWN')
             elif key == 'LEFT': self.ejecutar_evento('ON_KEY_LEFT')
@@ -237,7 +238,7 @@ class Juego:
                         self.dibujar_celda(x, y, color)
 
             # 2. Dibujar la pieza actual de Tetris
-            if self.tipo_juego == 'TETRIS' and self.pieza_actual and not self.lineas_animandose:
+            if self.tipo_juego == 'TETRIS' or self.tipo_juego == 'TETRIS_REBORN' and self.pieza_actual and not self.lineas_animandose:
                 matriz_pieza = self.pieza_actual[self.pieza_rotacion]
                 for y_offset, fila in enumerate(matriz_pieza):
                     for x_offset, celda in enumerate(fila):
@@ -272,7 +273,7 @@ class Juego:
                 if verbo == 'INCREASE_SCORE': self.puntuacion += int(objeto)
                 if verbo == 'GAME_OVER': self.juego_terminado = True
 
-                if self.tipo_juego == 'TETRIS':
+                if self.tipo_juego == 'TETRIS' or self.tipo_juego == 'TETRIS_REBORN':
                     if verbo == 'SPAWN': self.tetris_spawn_pieza()
                     if verbo == 'MOVE': self.tetris_mover_pieza(accion['params'][0])
                     if verbo == 'ROTATE': self.tetris_rotar_pieza()
