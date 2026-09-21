@@ -68,7 +68,13 @@ class GestorAudioNativo(object):
         if isinstance(nombre_archivo, unicode):
             # MCI (winmm ANSI) no acepta unicode: error 292. Todo bytes.
             # (Los nombres del JSON llegan como unicode.)
-            nombre_archivo = nombre_archivo.encode("mbcs")
+            if IS_WIN:
+                # MCI (winmm ANSI) no acepta unicode: error 292. Necesita bytes ANSI.
+                nombre_archivo = nombre_archivo.encode("mbcs")
+            else:
+                # En Linux la ruta va a subprocess, que espera bytes en la codificación
+                # del sistema de archivos (normalmente UTF-8).
+                nombre_archivo = nombre_archivo.encode(sys.getfilesystemencoding() or "utf-8")
         if os.path.isabs(nombre_archivo) and os.path.isfile(nombre_archivo):
             return os.path.normpath(nombre_archivo)
         clave = os.path.basename(nombre_archivo)
