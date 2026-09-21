@@ -10,6 +10,8 @@ import os
 import struct
 import tempfile
 import wave
+import sys
+
 
 FPS = 22050
 PICO = 0.04
@@ -34,7 +36,7 @@ def ruta_cancion(nombre, notas):
     ruta = os.path.join(base, "%s_%s.wav" % (nombre, firma))
     if isinstance(ruta, _texto):
         # MCI (winmm ANSI) no acepta unicode: error 292. Todo bytes.
-        ruta = ruta.encode("mbcs")
+        ruta = ruta.encode(sys.getfilesystemencoding() or 'utf-8')
     if os.path.isfile(ruta) and os.path.getsize(ruta) > 0:
         return ruta
     try:
