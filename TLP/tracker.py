@@ -2,8 +2,7 @@
 # tracker.py - Motor de canciones programadas en .brick (Python 2.7 Stdlib)
 # Sintetiza las partituras del JSON a .wav en el primer run, con cache.
 # Timbre: lead senoidal + bajo senoidal una octava abajo (receta validada
-# en pruebas: acompana sin competir). Pico normalizado al 4%, igual que
-# los .wav de songs/ para mantener el balance con mute/volumen.
+# en pruebas: acompana sin competir). Pico normalizado al 4%.
 import hashlib
 import math
 import os

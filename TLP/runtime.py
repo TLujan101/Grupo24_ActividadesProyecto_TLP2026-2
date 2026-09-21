@@ -124,9 +124,8 @@ class Juego:
         self.btn_sonido.pack(pady=20, padx=10)
 
         self.audio = GestorAudioNativo("songs")
-        # La musica de fondo solo viene del .brick (PLAY_MUSIC).
-        # Sin bloque SONG el juego arranca en silencio; los efectos
-        # (rotar, comer, ...) siguen sonando igual.
+        # La musica y los efectos solo vienen del .brick
+        # (PLAY_MUSIC/PLAY_EFFECT); sin SONG/EFFECT arranca en silencio.
 
         if self.tipo_juego == 'TETRIS':
             self.pieza_actual = None
@@ -193,8 +192,7 @@ class Juego:
     def cerrar_ventana(self):
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
-        if hasattr(self, 'audio'):
-            self.audio.detener_todo()
+        self.audio.detener_todo()
         self.root.destroy()
         os._exit(0)
 
@@ -290,11 +288,9 @@ class Juego:
                     if verbo == 'SPAWN' and objeto == 'PLAYER': self.snake_spawn_jugador(accion)
                     if verbo == 'SPAWN' and objeto == 'FOOD': self.snake_spawn_comida()
                     if verbo == 'MOVE' and objeto == 'PLAYER': self.snake_mover_jugador()
-                    if verbo == 'GROW': self.snake_crecer()
 
     def musica_brick(self, nombre):
         # Musica programada en el .brick (opcional): sintetiza y reproduce.
-        # Sin bloque SONG el juego usa sus .wav como siempre (retrocompatible).
         canciones = self.datos_juego.get('songs', {})
         if not nombre or nombre not in canciones:
             return
@@ -566,13 +562,9 @@ class Juego:
         elif direccion == 'RIGHT' and self.serpiente_direccion[0] != -1:
             self.serpiente_direccion = (1, 0)
 
-    def snake_crecer(self):
-        pass
-
     def mostrar_game_over(self):
-        if hasattr(self, 'audio'):
-            self.audio.detener_musica()
-            self.ejecutar_evento('ON_GAME_OVER')
+        self.audio.detener_musica()
+        self.ejecutar_evento('ON_GAME_OVER')
 
         top = tk.Toplevel(self.root)
         top.title("Game Over")
