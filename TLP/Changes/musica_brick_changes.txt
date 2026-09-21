@@ -1,194 +1,124 @@
-Musica programada en el .brick (Actividad 3, primera entrega)
+# Sistema de Música de BrickScript
 
+Documentación del motor de audio: cómo una nota escrita en un archivo
+`.brick` termina sonando por los parlantes.
 
-1. Idea
+---
 
-Antes la musica vivia fuera del lenguaje: el runtime elegia un .wav
-segun el juego (ost_tetris.wav / ost_snake.wav) sin que el .brick
-dijera nada.
+## 1. Resumen en una frase
 
-Ahora el .brick puede traer sus propias canciones y dispararlas
-por eventos. Es opcional: sin bloque SONG todo suena como antes
-(retrocompatibilidad).
+Las canciones se escriben como **listas de notas con duración en milisegundos**
+dentro del `.brick`, el compilador las convierte a **frecuencias en Hercios**,
+y el runtime las **sintetiza a un archivo WAV** que se reproduce con el
+reproductor de audio del sistema operativo.
 
+---
 
-2. Ejemplo en tetris_reborn.brick (nuevo)
+## 2. Glosario rápido
 
-> Bloque SONG con notas NOTE <nombre> <milisegundos>:
+| Término | Qué significa aquí |
+|---|---|
+| `.brick` | Archivo fuente del juego, escrito en BrickScript |
+| `.json` | Archivo intermedio que produce el compilador |
+| Nota | Par `(frecuencia en Hz, duración en ms)` |
+| Hz (Hercio) | Frecuencia del sonido. Más Hz = más agudo |
+| ms (milisegundo) | Duración de la nota. 1000 ms = 1 segundo |
+| Síntesis | Generar la onda de sonido matemáticamente, muestra por muestra |
+| WAV | Formato de audio sin comprimir |
+| Caché | Guardar el WAV ya generado para no resintetizarlo |
+| Chiptune | Estilo de música de 8 bits (Game Boy, NES). Ondas simples |
+| MIDI (número) | Sistema estándar para numerar notas musicales (A4 = 69 = 440 Hz) |
 
-DEFINE SONG TEMA_REBORN:
-  NOTE E5 220
-  NOTE D5 220
+---
+
+## 3. Flujo completo (de código a sonido)
+
+```
+  ┌─────────────────┐
+  │ juego.brick     │   ← Lo escribe el programador
+  │  DEFINE SONG... │
+  └────────┬────────┘
+           │  compiler.py
+           ▼
+  ┌─────────────────┐
+  │ juego.json      │   ← Notas ya convertidas a Hz + ms
+  │ "songs": {...}  │
+  │ "effects": {...}│
+  └────────┬────────┘
+           │  runtime.py carga el JSON al iniciar el juego
+           ▼
+  ┌─────────────────┐
+  │ EVENTO PLAY_... │   ← El juego dice "suena esta canción"
+  └────────┬────────┘
+           │  tracker.py
+           ▼
+  ┌─────────────────┐
+  │ canción.wav     │   ← Archivo en el temporal del sistema,
+  └────────┬────────┘      cacheado por hash MD5
+           │  audio.py
+           ▼
+  ┌─────────────────┐
+  │ aplay / paplay  │   ← Reproductor del sistema
+  │ (o MCI en Win)  │
+  └────────┬────────┘
+           ▼
+        🔊 parlantes
+```
+
+Cinco etapas, cada una con una responsabilidad clara:
+
+1. **Escribir** (`juego.brick`) → el humano declara la música.
+2. **Compilar** (`compiler.py`) → traducir notación musical a números.
+3. **Disparar** (`runtime.py`) → decidir cuándo suena cada cosa.
+4. **Sintetizar** (`tracker.py`) → generar el WAV.
+5. **Reproducir** (`audio.py`) → mandarlo a los parlantes.
+
+---
+
+## 4. Etapa 1: cómo se escribe música en un `.brick`
+
+Dentro de un `.brick` se definen canciones y efectos con bloques. Cada
+nota lleva **dos datos**: el nombre de la nota y su **duración en
+milisegundos**.
+
+### 4.1 Canciones
+
+```brickscript
+DEFINE SONG TETRIS_TEMA_A:
+  NOTE E5 440
+  NOTE B4 220
   NOTE C5 220
-  NOTE D5 220
-  NOTE E5 220
-  NOTE G5 220
-  NOTE A5 440
-  NOTE G5 440
+  NOTE D5 440
+  NOTE C5 220
+  NOTE B4 220
+  NOTE A4 440
+  NOTE A4 880
 END
+```
 
-> Disparo por evento (reemplaza al .wav automatico, sin mezclarse):
+- `E5`, `B4`, `C5` → nombre de nota (letra A–G + octava).
+- `440`, `220`, `880` → **duración en milisegundos**.
+- Un bloque `SONG` es música de fondo: se reproduce en bucle.
+- Las líneas que empiezan con `#` son comentarios.
 
-ON START:
-  SPAWN RANDOM_SHAPE
-  PLAY_MUSIC TEMA_REBORN
-END
+### 4.2 Efectos
 
-> Para callar desde el lenguaje:
-
-  STOP_MUSIC
-
-Notas diatonicas A-G con octava (ej. E5). Sin sostenidos en v1:
-el lexer parte "#" al tokenizar, asi que C#4 llegaria como C4.
-
-
-3. tetris.bnf (modificado)
-
-> El programa ahora acepta canciones entre piezas y eventos:
-
-<programa> ::= <tipo_juego> <grid> <definiciones> <canciones> <eventos>
-
-> Reglas nuevas (aditivas, lo viejo no se toca):
-
-<canciones>      ::= "" | <cancion> <canciones>
-<cancion>        ::= "DEFINE" "SONG" <identificador> ":" <notas> "END"
-<notas>          ::= <nota> | <nota> <notas>
-<nota>           ::= "NOTE" <nota_nombre> <numero>
-<nota_nombre>    ::= <letra_nota> <digito>
-<letra_nota>     ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
-
-> Acciones nuevas en Tetris:
-
-<accion_musica> ::= "PLAY_MUSIC" <identificador> | "STOP_MUSIC"
-
-
-4. compiler.py (modificado)
-
-> El AST ahora trae "songs" (vacio en .brick viejos: songs: {}):
-
-self.ast = {"tipo_juego": None, "config": {}, "shapes": {}, "songs": {}, "events": {}}
-
-> DEFINE mira el segundo token para elegir parser:
-
-if self.tokens[self.posicion + 1] == 'SONG':
-    self.parsear_cancion()
-else:
-    self.parsear_shape()
-
-> Tabla nota a Hz (MIDI) y parser de cancion:
-
-NOTAS_SEMITONO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
-
-def nota_a_hz(self, letra, octava):
-    midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra]
-    return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
-
-> Ej: E5 -> 659.3 Hz, C5 -> 523.3 Hz (verificado compilando).
-> El JSON guarda {"notas": [[hz, ms], ...]} por cancion.
-
-> Lexer: token nuevo para notas (antes "E5" llegaba como "5"
-> y la letra se perdia; probado con error real):
-
-token_regex = r'\b[A-G][0-9]+\b|\b[A-Z_]+\b|\d+|[\[\](),:]'
-
-> STOP_MUSIC es de una sola palabra como GAME_OVER:
-
-if verbo == 'GAME_OVER' or verbo == 'STOP_MUSIC':
-
-> PLAY_MUSIC/STOP_MUSIC agregados a las palabras reservadas
-> para que no se los coma como parametro de la accion anterior.
-
-
-5. tracker.py (archivo nuevo, motor de canciones)
-
-> Sintetiza la partitura del JSON a .wav en el primer run,
-> con cache por contenido (md5) en temporal/brickscript_brick/.
-> Solo lento la primera vez por cancion.
-
-def ruta_cancion(nombre, notas):
-
-> Timbre: lead senoidal + bajo senoidal una octava abajo
-> (receta validada en pruebas: acompana sin competir).
-> Pico normalizado al 4%, igual que songs/ para no romper
-> el balance con el boton de mute.
-> OJO py2.7: wave no soporta `with`, se cierra explicito
-> con try/finally (error real encontrado probando).
-
-
-6. audio.py (modificado)
-
-> _resolver acepta rutas absolutas (canciones del .brick
-> en temporal) o nombres en songs/ como siempre:
-
-def _resolver(self, nombre_archivo):
-    if os.path.isabs(nombre_archivo) and os.path.isfile(nombre_archivo):
-        return os.path.normpath(nombre_archivo)
-
-> musica_actual ahora guarda la ruta completa, asi el
-> Mute/Unmute retoma tambien canciones del .brick.
-
-
-7. runtime.py (modificado)
-
-> Import con guarda por si falta el motor:
-
-try:
-    import tracker as MotorCanciones
-except ImportError:
-    MotorCanciones = None
-
-> Despacho en ejecutar_evento (vale para cualquier GAME_TYPE):
-
-if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
-if verbo == 'STOP_MUSIC': self.audio.detener_musica()
-
-> Sin bloque SONG el juego usa sus .wav como siempre:
-
-    def musica_brick(self, nombre):
-        canciones = self.datos_juego.get('songs', {})
-        if not nombre or nombre not in canciones:
-            return
-
-> Nombres inexistentes o canciones vacias se ignoran
-> en silencio (verificado: sin error).
-
-> PLAY_MUSIC es idempotente: ON_START se re-dispara en cada
-> spawn y antes reiniciaba el tema por pieza. Ahora compara
-> musica_actual + reproduciendo_musica y solo reproduce si
-> cambio el tema o estaba detenido (verificado: 3 spawns =
-> 1 reproduccion; tras STOP vuelve a sonar).
-
-> Retiro total del audio hardcodeado: se elimino el autoplay
-> por juego Y los 5 efectos del motor (rotar, explosion,
-> linea_clear, comer, game_over). Todo el audio sale del .brick;
-> sin SONG/EFFECT el juego es silencioso. game_over conserva
-> detener_musica() (callar no es sonar).
-
-
-8. Verificacion (Python 2.7 real, C:\Python27)
-
-> tetris.brick viejo compila: songs: {} y shapes intactos.
-> tetris_reborn.brick compila: TEMA_REBORN con 8 notas y
-> ON_START con SPAWN + PLAY_MUSIC.
-> musica_brick() real (sin ventana) sintetiza, reproduce
-> por MCI en loop y detiene limpio.
-
-> BUG REAL encontrado jugando: solo sonaban efectos, la musica
-> del .brick no. Causa: los nombres del JSON llegan como unicode
-> y MCI (winmm ANSI) rechaza comandos unicode con error 292.
-> Los .wav de songs/ sonaban porque esas rutas ya eran bytes.
-> Fix en dos fronteras: tracker.ruta_cancion() devuelve bytes
-> (encode mbcs) y audio._resolver() codifica a bytes lo que entre.
-> Verificado espiando MCI: open -> 0, play -> 0, loop re-dispara.
-
-
-9. Efectos en el .brick (DEFINE EFFECT + PLAY_EFFECT)
-
-> Misma receta que las canciones, pero suenan una sola vez:
-
+```brickscript
 DEFINE EFFECT BEEP_LINEA:
   NOTE A5 60
   NOTE E6 120
+END
+```
+
+Misma receta que una canción, pero **suenan una sola vez** y **no cortan
+la música de fondo**.
+
+### 4.3 Disparo por eventos
+
+```brickscript
+ON START:
+  SPAWN RANDOM_SHAPE
+  PLAY_MUSIC TETRIS_TEMA_A
 END
 
 ON LINE_CLEAR:
@@ -196,26 +126,363 @@ ON LINE_CLEAR:
   PLAY_EFFECT BEEP_LINEA
 END
 
-> Gramatica: <efectos> ::= "" | <efecto> <efectos>, con
-> <efecto> ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END".
-> Reutiliza <notas>/<nota> de SONG, sin reglas duplicadas.
-> El programa queda: <tipo_juego> <grid> <definiciones>
-> <canciones> <efectos> <eventos>.
+ON GAME_OVER:
+  PLAY_EFFECT FIN_JUEGO
+END
+```
 
-> Compilador: parsear_efecto() comparte leer_notas() con las
-> canciones; el AST trae "effects": {} (vacio en .brick viejos).
-> PLAY_EFFECT agregado a palabras reservadas.
+### 4.4 Limitación conocida: sin sostenidos en v1
 
-> Runtime: PLAY_EFFECT -> efecto_brick() sintetiza con el mismo
-> motor pero reproduce con reproducir_efecto() (una vez, sin loop).
-> Nombres inexistentes se ignoran en silencio.
+Las notas son **diatónicas** (A–G natural con octava). **No hay
+sostenidos ni bemoles** en esta versión, porque el lexer trata `#` como
+inicio de comentario. Si escribes `C#4`, llegará como `C4`. Es una
+limitación deliberada para v1.
 
-> Fase 2 completada: eventos ON_ROTATE (Tetris), ON_EXPLOSION
-> (Tetris, rama de bombas/columnas) y ON_GAME_OVER (ambos juegos)
-> agregados a las gramaticas y al runtime. tetris_reborn.brick
-> los usa: BEEP_ROTAR, BEEP_BOMBA y FIN_JUEGO.
-> ON_ROTATE lleva guarda anti-recursion (_en_rotate): si el
-> .brick pone ROTATE dentro de ON ROTATE, la accion interna rota
-> una vez mas sin re-disparar (verificado con test: no cuelga).
-> Queda sin sonido lo que no tenga evento en el .brick (sin
-> PLAY_EFFECT el juego es silencioso en esa accion).
+### 4.5 Retrocompatibilidad
+
+Todo el audio es **opcional**. Un `.brick` viejo, sin bloques `SONG`
+ni `EFFECT`, se compila y ejecuta sin error: simplemente suena en
+silencio. El audio hardcodeado del motor (un `.wav` automático por juego
+y cinco efectos fijos) fue **eliminado** en esta versión.
+
+---
+
+## 5. La partitura en milisegundos (⭐ concepto clave)
+
+Aquí está la idea que más preguntas genera, así que conviene tenerla clara.
+
+### 5.1 ¿Por qué milisegundos y no "negra", "corchea"?
+
+La notación musical tradicional (redonda, blanca, negra, corchea...) es
+**relativa**: una negra "dura lo que dure" según el tempo. Eso obliga a
+llevar la cuenta de un BPM (beats per minute) y hacer conversiones.
+
+Nosotros usamos **tiempo absoluto en milisegundos**. Una nota dura
+exactamente lo que dice el número, sin importar el tempo. Es más simple
+de compilar, más simple de sintetizar, y más fácil de depurar.
+
+### 5.2 Equivalencias intuitivas
+
+| Duración | Se parece a... |
+|---|---|
+| 40 ms | Un "clic" muy corto (efecto de rotar) |
+| 60 ms | Un "beep" corto (efecto de línea) |
+| 100 ms | Un "blip" (bomba) |
+| 220 ms | Una nota rápida (corchea a ~136 BPM) |
+| 440 ms | Una nota normal (negra a ~136 BPM) |
+| 880 ms | Una nota larga (blanca a ~136 BPM) |
+| 1000 ms | Un segundo exacto |
+
+### 5.3 Cómo se convierte a "partitura" real
+
+El sintetizador recorre las notas en orden y va acumulando tiempo:
+
+```
+Nota 0: empieza en t = 0 ms,     dura 440 ms → termina en 440 ms
+Nota 1: empieza en t = 440 ms,   dura 220 ms → termina en 660 ms
+Nota 2: empieza en t = 660 ms,   dura 220 ms → termina en 880 ms
+Nota 3: empieza en t = 880 ms,   dura 440 ms → termina en 1320 ms
+```
+
+Es decir, **la canción no es más que una lista de intervalos de tiempo**.
+El sintetizador recorre esa lista, y para cada intervalo genera la onda
+correspondiente a la frecuencia indicada, durante la cantidad de muestras
+que quepan en esa duración.
+
+> Fórmula: `muestras = (duración_ms / 1000) × frecuencia_de_muestreo`
+
+Con `frecuencia_de_muestreo = 22050 Hz` (muestras por segundo):
+
+- Nota de 440 ms → `0.44 × 22050 = 9702 muestras`
+- Nota de 220 ms → `0.22 × 22050 = 4851 muestras`
+- Nota de 60 ms  → `0.06 × 22050 = 1323 muestras`
+
+---
+
+## 6. Etapa 2: el compilador traduce nota → frecuencia
+
+El compilador lee el `.brick` y, para cada nota, calcula su **frecuencia
+en Hercios** con la fórmula de afinación estándar. La implementación usa
+la tabla de semitonos y la fórmula MIDI:
+
+```python
+NOTAS_SEMITONO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+def nota_a_hz(self, letra, octava):
+    midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra]
+    return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
+```
+
+Ejemplos verificados:
+
+| Nota | Frecuencia |
+|---|---|
+| A4 | 440.0 Hz |
+| C5 | 523.3 Hz |
+| E5 | 659.3 Hz |
+| A5 | 880.0 Hz |
+| E6 | 1318.5 Hz |
+
+El resultado se guarda en el `.json` así:
+
+```json
+{
+  "songs": {
+    "TETRIS_TEMA_A": {
+      "notas": [
+        [659.3, 440],
+        [493.9, 220],
+        [523.3, 220],
+        [587.3, 440]
+      ]
+    }
+  },
+  "effects": {
+    "BEEP_LINEA": {
+      "notas": [[880.0, 60], [1318.5, 120]]
+    }
+  }
+}
+```
+
+Fíjate: **cada nota es un par `[Hz, ms]`**. Eso es todo lo que el runtime
+necesita saber para hacerla sonar.
+
+---
+
+## 7. Etapa 3: el runtime dispara la música
+
+El runtime tiene un objeto `Juego` que va ejecutando eventos. Los que
+afectan al audio son:
+
+| Evento | Qué hace |
+|---|---|
+| `PLAY_MUSIC nombre` | Arranca (o cambia) la música de fondo en bucle |
+| `STOP_MUSIC` | Detiene la música de fondo |
+| `PLAY_EFFECT nombre` | Reproduce un efecto corto encima de la música |
+
+Cuando el runtime encuentra uno de estos eventos, llama a la función
+correspondiente del motor de audio:
+
+```python
+def musica_brick(self, nombre):
+    canciones = self.datos_juego.get('songs', {})
+    if not nombre or nombre not in canciones:
+        return
+    notas = canciones[nombre]['notas']
+    ruta = MotorCanciones.ruta_cancion(nombre, notas)
+    self.audio.reproducir_musica_fondo(ruta)
+```
+
+### 7.1 `PLAY_MUSIC` es idempotente
+
+Detalle importante: **si la misma canción ya está sonando, no se
+reinicia**. Esto evita que un `ON START` que se re-dispara (por ejemplo,
+al hacer spawn de una nueva pieza) corte el tema cada vez. Solo cambia
+la música si:
+
+- el nombre de la canción cambió, o
+- la música estaba detenida (por ejemplo, tras un `STOP_MUSIC`).
+
+### 7.2 Nombres inexistentes se ignoran
+
+Si el `.brick` hace `PLAY_MUSIC CANCION_QUE_NO_EXISTE`, el runtime no
+hace nada y no lanza error. Igual para `PLAY_EFFECT`. Esto facilita
+iterar el `.brick` sin tener que definir todas las canciones de golpe.
+
+---
+
+## 8. Etapa 4: el sintetizador (tracker.py)
+
+### 8.1 Caché por hash MD5
+
+Antes de sintetizar, se calcula un hash MD5 de la lista de notas:
+
+```python
+clave = hashlib.md5(repr(notas).encode()).hexdigest()
+ruta = os.path.join(tempfile.gettempdir(), "brickscript_brick", clave + ".wav")
+if os.path.isfile(ruta):
+    return ruta          # ← ya existe, no sintetizamos
+```
+
+Si el archivo ya existe, se devuelve directamente. Esto significa que la
+**primera** vez que suena una canción se sintetiza, y las siguientes son
+instantáneas. Y como el hash depende solo del contenido, dos canciones
+con las mismas notas comparten archivo.
+
+La carpeta es el **temporal del sistema** (`tempfile.gettempdir()`):
+`/tmp` en Linux, `%TEMP%` en Windows.
+
+### 8.2 Síntesis de la onda
+
+Si no está en caché, se genera la onda muestra a muestra:
+
+- Frecuencia de muestreo: **22050 Hz** (la mitad que un CD).
+- Formato: **WAV mono, 16 bits**.
+- Por cada nota se calculan **dos ondas senoidales**:
+  - **Lead**: a la frecuencia de la nota.
+  - **Bajo**: a la mitad de frecuencia (una octava por debajo).
+- Se aplica una **envolvente** de ataque y liberación corta en los
+  extremos de cada nota, para evitar "clics".
+- Se **normaliza el pico al 4 %** del máximo, para que el volumen sea
+  suave, consistente con los `.wav` de `songs/`, y no interfiera con el
+  botón de mute.
+
+El resultado se escribe al WAV y se devuelve la ruta.
+
+> Nota técnica: en Python 2.7, el módulo `wave` no soporta `with`, así que
+> el archivo se cierra explícitamente con `try/finally`.
+
+---
+
+## 9. Etapa 5: la reproducción (audio.py)
+
+`audio.py` recibe la ruta al WAV y la manda a los parlantes. Se encarga
+de dos cosas por separado:
+
+- **Música de fondo**: un hilo que reproduce el WAV en bucle, en un canal
+  propio.
+- **Efectos**: se lanzan en paralelo, sin cortar la música.
+
+### 9.1 Multiplataforma
+
+| Sistema | Mecanismo |
+|---|---|
+| **Windows** | MCI (`winmm.dll`) vía `ctypes`. Abre el WAV con un alias y lo controla desde Python |
+| **Linux** | `subprocess.Popen` con `pw-play`, `paplay` o `aplay`, según cuál esté disponible |
+
+En Linux se detecta el reproductor al arrancar, probando en orden
+`pw-play` → `paplay` → `aplay`, y se usa el primero que exista.
+
+### 9.2 Por qué "multicanal"
+
+La música y los efectos son **procesos independientes**. En Linux, cada
+uno es un `Popen` distinto, y el sistema operativo mezcla sus salidas. En
+Windows, cada uno tiene su propio alias MCI. Resultado: un efecto no
+interrumpe la música.
+
+### 9.3 Bug histórico: MCI y unicode (error 292)
+
+Un bug real encontrado en pruebas: la música del `.brick` no sonaba en
+Windows, pero los `.wav` de `songs/` sí. Causa: los nombres del JSON
+llegan como `unicode`, y `mciSendStringA` (API ANSI de Windows) rechaza
+comandos unicode con error 292. Los `.wav` de `songs/` ya eran bytes,
+por eso funcionaban.
+
+Solución en dos fronteras:
+
+- `tracker.ruta_cancion()` devuelve bytes (encode `mbcs` en Windows).
+- `audio._resolver()` codifica a bytes lo que reciba.
+
+En Linux, la codificación equivalente es la del sistema de archivos
+(normalmente UTF-8).
+
+---
+
+## 10. Cómo añadir música a un juego (receta paso a paso)
+
+1. Abre el `.brick` de tu juego.
+2. Añade un bloque `DEFINE SONG nombre:` con las notas que quieras.
+3. (Opcional) Añade bloques `DEFINE EFFECT nombre:` para efectos cortos.
+4. En el evento donde deba sonar, escribe `PLAY_MUSIC nombre` (o
+   `PLAY_EFFECT nombre`).
+5. Compila con el compilador para regenerar el `.json`.
+6. Ejecuta el juego. La primera vez tardará unas décimas (sintetiza);
+   después será inmediato.
+
+### Eventos que aceptan audio
+
+| Evento | Cuándo se dispara |
+|---|---|
+| `ON START` | Al iniciar el juego |
+| `ON ROTATE` | Al rotar una pieza |
+| `ON LINE_CLEAR` | Al limpiar una línea |
+| `ON RAINBOW_LINE_CLEAR` | Al limpiar una línea arcoíris |
+| `ON EXPLOSION` | Al explotar una bomba |
+| `ON GAME_OVER` | Al terminar la partida |
+| `ON PIECE_LAND` | Al aterrizar una pieza |
+
+---
+
+## 11. Preguntas frecuentes (posibles preguntas del profesor)
+
+**¿Por qué no usan archivos MP3?**
+Porque el objetivo es que la música venga **del código**, no de recursos
+externos. Todo se genera a partir de las notas del `.brick`.
+
+**¿Por qué onda senoidal y no cuadrada como la Game Boy?**
+La senoidal suena más suave y no cansa al oído. La cuadrada es más "8
+bits" pero más agresiva. Es una decisión estética. Además, el senoidal
+se genera con `math.sin`, que ya está en la stdlib de Python 2.7.
+
+**¿Qué pasa si cambio una nota en el `.brick`?**
+Al recompilar, cambia el hash MD5, así que se sintetiza un WAV nuevo. El
+WAV viejo queda en el temporal hasta que se reinicie la máquina.
+
+**¿Por qué milisegundos y no BPM?**
+Porque es más simple: no hay que llevar la cuenta de un tempo, la duración
+de cada nota es absoluta. El compilador no necesita conversiones.
+
+**¿Cuánto tarda en sonar una canción la primera vez?**
+Depende del largo. Una melodía típica de 10–30 segundos tarda unas décimas
+de segundo. Después está en caché y es instantánea.
+
+**¿Se puede tocar música y efecto a la vez?**
+Sí. Música y efectos van en canales separados (procesos distintos en Linux,
+alias distintos en Windows). Un efecto no corta la música.
+
+**¿Funciona en Windows y Linux?**
+Sí. `audio.py` detecta la plataforma y usa MCI en Windows o `aplay`/`paplay`
+en Linux. El resto del sistema (compilador, tracker, runtime) es idéntico.
+
+**¿Qué pasa si el sistema no tiene `aplay` ni `paplay` ni `pw-play`?**
+El sonido no se reproduce, pero el juego sigue funcionando.
+
+**¿Por qué el volumen es tan bajo (4 %)?**
+Para evitar fatiga auditiva y clipping. Se normaliza a un nivel suave pero
+consistente con los `.wav` originales.
+
+**¿Se pueden usar sostenidos (`C#4`)?**
+No en v1. El lexer trata `#` como comentario, así que `C#4` se leería
+como `C4`. Es una limitación conocida.
+
+**¿Qué pasa con un `.brick` viejo que no tiene canciones?**
+Se compila y ejecuta normalmente, pero sin música ni efectos. El audio
+hardcodeado del motor se eliminó, así que todo lo que suene tiene que
+venir del `.brick`.
+
+**¿Cómo se evita que `ROTATE` dentro de `ON ROTATE` cause un bucle infinito?**
+Con una guarda `_en_rotate`: la acción interna rota una vez más sin
+re-disparar el evento. Verificado con un test.
+
+---
+
+## 12. Glosario técnico
+
+| Término | Definición |
+|---|---|
+| **Frecuencia** | Cuántas veces por segundo oscila la onda. En Hercios (Hz). 440 Hz = nota La |
+| **Muestra** | Un valor de amplitud individual. Un WAV es una secuencia de muestras |
+| **Frecuencia de muestreo** | Cuántas muestras por segundo. 22050 Hz = 22050 valores por segundo |
+| **Onda senoidal** | La forma de onda más suave y pura: `sin(x)` |
+| **Envolvente** | Curva de volumen al inicio y fin de una nota. Evita clics |
+| **Normalizar** | Ajustar la amplitud máxima a un valor objetivo (aquí 4 %) |
+| **Hash MD5** | Huella digital de un conjunto de datos. Se usa como nombre de archivo de caché |
+| **MCI** | Media Control Interface. API de audio de Windows |
+| **Popen** | Lanzar un proceso externo desde Python |
+| **Idempotente** | Que repetir la operación no cambia el resultado (aquí: `PLAY_MUSIC` dos veces = una reproducción) |
+
+---
+
+## 13. Archivos del sistema de audio
+
+| Archivo | Responsabilidad |
+|---|---|
+| `compiler.py` | Traduce `.brick` → `.json` (notas → frecuencias) |
+| `runtime.py` | Ejecuta el juego y dispara eventos de audio |
+| `tracker.py` | Sintetiza las notas a un WAV (con caché por hash) |
+| `audio.py` | Reproduce los WAV (multiplataforma, multicanal) |
+
+---
+
+*Documento del grupo 24 – Proyecto TLP 2026-2*
