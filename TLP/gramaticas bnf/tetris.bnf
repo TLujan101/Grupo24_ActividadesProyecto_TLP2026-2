@@ -1,8 +1,9 @@
-<programa> ::= <tipo_juego> <grid> <definiciones> <eventos>
+<programa> ::= <tipo_juego> <grid> <definiciones> <canciones> <efectos> <eventos>
 
 <tipo_juego> ::= "GAME_TYPE" "TETRIS"
 <grid>       ::= "GAME_GRID" "(" <numero> "," <numero> ")"
 <definiciones> ::= <definicion_shape> | <definicion_shape> <definiciones>
+<canciones>      ::= "" | <cancion> <canciones>
 <eventos>    ::= <evento> | <evento> <eventos>
 
 <definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <extras> ":" <estados> "END"
@@ -14,14 +15,24 @@
 <valores_fila>     ::= <numero> | <numero> "," <valores_fila>
 
 <evento>         ::= "ON" <nombre_evento_tetris> ":" <acciones_tetris> "END"
-<nombre_evento_tetris> ::= "START" | "TICK" | "LINE_CLEAR" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
+<nombre_evento_tetris> ::= "START" | "TICK" | "LINE_CLEAR" | "ROTATE" | "EXPLOSION" | "GAME_OVER" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
 <acciones_tetris>    ::= <accion_tetris> | <accion_tetris> <acciones_tetris>
 
-<accion_tetris> ::= <accion_spawn> | <accion_mover> | <accion_rotar> | <accion_puntos>
+<accion_tetris> ::= <accion_spawn> | <accion_mover> | <accion_rotar> | <accion_puntos> | <accion_musica>
 <accion_spawn>  ::= "SPAWN" "RANDOM_SHAPE"
 <accion_mover>  ::= "MOVE" "CURRENT_PIECE" <direccion>
 <accion_rotar>  ::= "ROTATE" "CURRENT_PIECE"
 <accion_puntos> ::= "INCREASE_SCORE" <numero>
+<accion_musica> ::= "PLAY_MUSIC" <identificador> | "STOP_MUSIC" | "PLAY_EFFECT" <identificador>
+
+<efectos>        ::= "" | <efecto> <efectos>
+<efecto>         ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END"
+
+<cancion>        ::= "DEFINE" "SONG" <identificador> ":" <notas> "END"
+<notas>          ::= <nota> | <nota> <notas>
+<nota>           ::= "NOTE" <nota_nombre> <numero>
+<nota_nombre>    ::= <letra_nota> <digito>
+<letra_nota>     ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
 
 <direccion>     ::= "LEFT" | "RIGHT" | "DOWN"
 <identificador> ::= <letra> | <letra> <identificador>

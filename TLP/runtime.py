@@ -2,6 +2,7 @@
 # runtime.py (VERSION CON INTERFAZ GRAFICA USANDO Tkinter y caracteres ASCII unicamente)
 
 import sys
+import os
 import json
 import time
 import random
@@ -9,6 +10,10 @@ import bisect
 import Tkinter as tk # type: ignore
 import tkMessageBox # type: ignore
 from audio import GestorAudioNativo
+try:
+    import tracker as MotorCanciones
+except ImportError:
+    MotorCanciones = None
 
 Colores = {
     "CYAN": "#00FFFF",
@@ -101,17 +106,27 @@ class Juego:
         self.label_controles.pack(pady=20, padx=10)
 
         self.root.bind('<Key>', self.manejar_input_gui)
-        
+
         self.btn_sonido = tk.Button(
-            self.root, 
+            self.marco_score, 
             text="Audio: ON", 
             command=self.toggle_audio,
-            font=("CONSOLAS", 10, "bold")
+            font=("Consolas", 10, "bold"),
+            bg="#2a2a3e",
+            fg="#03a80b",
+            activebackground="#3e3e5e",
+            activeforeground="#00ff22",
+            relief="groove",
+            bd=1,
+            padx=8,
+            pady=4
         )
-        self.btn_sonido.pack(pady=4) 
-        
+        self.btn_sonido.pack(pady=20, padx=10)
+
         self.audio = GestorAudioNativo("songs")
-        self.audio.reproducir_musica_fondo("ost_tetris.wav")
+        # La musica de fondo solo viene del .brick (PLAY_MUSIC).
+        # Sin bloque SONG el juego arranca en silencio; los efectos
+        # (rotar, comer, ...) siguen sonando igual.
 
         if self.tipo_juego == 'TETRIS':
             self.pieza_actual = None
@@ -141,16 +156,13 @@ class Juego:
         self.timer_gravedad = 0
         self.ejecutar_evento('ON_START')
         self.timer_id = None 
-        
+
     def toggle_audio(self):
         es_silencioso = self.audio.alternar_silencio()
         if es_silencioso:
-            self.btn_sonido.config(text="Audio: OFF")
-            
+            self.btn_sonido.config(text="Audio: OFF", fg="#888888")
         else:
-            self.btn_sonido.config(text="Audio: ON")
-            self.audio = GestorAudioNativo("songs")
-            self.audio.reproducir_musica_fondo("ost_tetris.wav")
+            self.btn_sonido.config(text="Audio: ON", fg="#03a80b")
 
 
     def run(self):
@@ -181,8 +193,10 @@ class Juego:
     def cerrar_ventana(self):
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
+        if hasattr(self, 'audio'):
+            self.audio.detener_todo()
         self.root.destroy()
-        sys.exit(0)
+        os._exit(0)
 
     def manejar_input_gui(self, event):
         #Bloquear controles mientras se reproduce la animación de borrado
@@ -263,6 +277,9 @@ class Juego:
 
                 if verbo == 'INCREASE_SCORE': self.puntuacion += int(objeto)
                 if verbo == 'GAME_OVER': self.juego_terminado = True
+                if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
+                if verbo == 'STOP_MUSIC': self.audio.detener_musica()
+                if verbo == 'PLAY_EFFECT': self.efecto_brick(objeto)
 
                 if self.tipo_juego == 'TETRIS':
                     if verbo == 'SPAWN': self.tetris_spawn_pieza()
@@ -274,6 +291,34 @@ class Juego:
                     if verbo == 'SPAWN' and objeto == 'FOOD': self.snake_spawn_comida()
                     if verbo == 'MOVE' and objeto == 'PLAYER': self.snake_mover_jugador()
                     if verbo == 'GROW': self.snake_crecer()
+
+    def musica_brick(self, nombre):
+        # Musica programada en el .brick (opcional): sintetiza y reproduce.
+        # Sin bloque SONG el juego usa sus .wav como siempre (retrocompatible).
+        canciones = self.datos_juego.get('songs', {})
+        if not nombre or nombre not in canciones:
+            return
+        if MotorCanciones is None:
+            return
+        ruta = MotorCanciones.ruta_cancion(nombre, canciones[nombre].get('notas', []))
+        if not ruta:
+            return
+        # Idempotente: ON_START se re-dispara en cada spawn; si el tema
+        # ya suena no se reinicia.
+        if self.audio.musica_actual != ruta or not self.audio.reproduciendo_musica:
+            self.audio.reproducir_musica_fondo(ruta)
+
+    def efecto_brick(self, nombre):
+        # Efecto programado en el .brick: se sintetiza igual que una
+        # cancion pero suena una sola vez (no en loop).
+        efectos = self.datos_juego.get('effects', {})
+        if not nombre or nombre not in efectos:
+            return
+        if MotorCanciones is None:
+            return
+        ruta = MotorCanciones.ruta_cancion(nombre, efectos[nombre].get('notas', []))
+        if ruta:
+            self.audio.reproducir_efecto(ruta)
 
 
     def tetris_spawn_pieza(self):
@@ -314,6 +359,14 @@ class Juego:
         nueva_rotacion = (self.pieza_rotacion + 1) % len(self.pieza_actual)
         if not self.tetris_verificar_colision(self.pieza_x, self.pieza_y, nueva_rotacion):
             self.pieza_rotacion = nueva_rotacion
+            # Guarda anti-recursion: si el .brick pone ROTATE dentro de
+            # ON ROTATE, la accion interna rota una vez mas sin re-disparar.
+            if not getattr(self, '_en_rotate', False):
+                self._en_rotate = True
+                try:
+                    self.ejecutar_evento('ON_ROTATE')
+                finally:
+                    self._en_rotate = False
 
     def tetris_fijar_pieza(self):
         matriz_pieza = self.pieza_actual[self.pieza_rotacion]
@@ -425,6 +478,7 @@ class Juego:
     def aplicar_borrado_lineas(self):
         # Si la lista contiene tuplas (x, y), proviene de Bombas o Limpia Columnas
         if self.lineas_animandose and isinstance(self.lineas_animandose[0], tuple):
+            self.ejecutar_evento('ON_EXPLOSION')
             for cx, cy in self.lineas_animandose:
                 if 0 <= cy < self.alto and 0 <= cx < self.ancho:
                     self.grid[cy][cx] = 0
@@ -516,6 +570,10 @@ class Juego:
         pass
 
     def mostrar_game_over(self):
+        if hasattr(self, 'audio'):
+            self.audio.detener_musica()
+            self.ejecutar_evento('ON_GAME_OVER')
+
         top = tk.Toplevel(self.root)
         top.title("Game Over")
         top.geometry("320x200")
@@ -553,7 +611,7 @@ class Juego:
             bd=0, 
             padx=20, 
             pady=5,
-            command=lambda: (self.root.destroy(), sys.exit(0))
+            command=lambda: (self.root.destroy(), os._exit(0))
         )
         btn_salir.pack(pady=20)
 

@@ -13,7 +13,7 @@
 <valores_fila>     ::= <numero> | <numero> "," <valores_fila>
 
 <evento>         ::= "ON" <nombre_evento_snake> ":" <acciones_snake> "END"
-<nombre_evento_snake> ::= "START" | "TICK" | "EAT_FOOD" | "COLLISION_WALL" | "COLLISION_SELF" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
+<nombre_evento_snake> ::= "START" | "TICK" | "EAT_FOOD" | "COLLISION_WALL" | "COLLISION_SELF" | "GAME_OVER" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
 <acciones_snake>     ::= <accion_snake> | <accion_snake> <acciones_snake>
 
 <accion_snake> ::= <accion_spawn_jugador> | <accion_spawn_comida> | <accion_mover> | <accion_direccion> | <accion_puntos> | <accion_crecer> | <accion_gameover>

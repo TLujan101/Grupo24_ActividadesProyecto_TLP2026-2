@@ -1,0 +1,221 @@
+Musica programada en el .brick (Actividad 3, primera entrega)
+
+
+1. Idea
+
+Antes la musica vivia fuera del lenguaje: el runtime elegia un .wav
+segun el juego (ost_tetris.wav / ost_snake.wav) sin que el .brick
+dijera nada.
+
+Ahora el .brick puede traer sus propias canciones y dispararlas
+por eventos. Es opcional: sin bloque SONG todo suena como antes
+(retrocompatibilidad).
+
+
+2. Ejemplo en tetris_reborn.brick (nuevo)
+
+> Bloque SONG con notas NOTE <nombre> <milisegundos>:
+
+DEFINE SONG TEMA_REBORN:
+  NOTE E5 220
+  NOTE D5 220
+  NOTE C5 220
+  NOTE D5 220
+  NOTE E5 220
+  NOTE G5 220
+  NOTE A5 440
+  NOTE G5 440
+END
+
+> Disparo por evento (reemplaza al .wav automatico, sin mezclarse):
+
+ON START:
+  SPAWN RANDOM_SHAPE
+  PLAY_MUSIC TEMA_REBORN
+END
+
+> Para callar desde el lenguaje:
+
+  STOP_MUSIC
+
+Notas diatonicas A-G con octava (ej. E5). Sin sostenidos en v1:
+el lexer parte "#" al tokenizar, asi que C#4 llegaria como C4.
+
+
+3. tetris.bnf (modificado)
+
+> El programa ahora acepta canciones entre piezas y eventos:
+
+<programa> ::= <tipo_juego> <grid> <definiciones> <canciones> <eventos>
+
+> Reglas nuevas (aditivas, lo viejo no se toca):
+
+<canciones>      ::= "" | <cancion> <canciones>
+<cancion>        ::= "DEFINE" "SONG" <identificador> ":" <notas> "END"
+<notas>          ::= <nota> | <nota> <notas>
+<nota>           ::= "NOTE" <nota_nombre> <numero>
+<nota_nombre>    ::= <letra_nota> <digito>
+<letra_nota>     ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
+
+> Acciones nuevas en Tetris:
+
+<accion_musica> ::= "PLAY_MUSIC" <identificador> | "STOP_MUSIC"
+
+
+4. compiler.py (modificado)
+
+> El AST ahora trae "songs" (vacio en .brick viejos: songs: {}):
+
+self.ast = {"tipo_juego": None, "config": {}, "shapes": {}, "songs": {}, "events": {}}
+
+> DEFINE mira el segundo token para elegir parser:
+
+if self.tokens[self.posicion + 1] == 'SONG':
+    self.parsear_cancion()
+else:
+    self.parsear_shape()
+
+> Tabla nota a Hz (MIDI) y parser de cancion:
+
+NOTAS_SEMITONO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+def nota_a_hz(self, letra, octava):
+    midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra]
+    return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
+
+> Ej: E5 -> 659.3 Hz, C5 -> 523.3 Hz (verificado compilando).
+> El JSON guarda {"notas": [[hz, ms], ...]} por cancion.
+
+> Lexer: token nuevo para notas (antes "E5" llegaba como "5"
+> y la letra se perdia; probado con error real):
+
+token_regex = r'\b[A-G][0-9]+\b|\b[A-Z_]+\b|\d+|[\[\](),:]'
+
+> STOP_MUSIC es de una sola palabra como GAME_OVER:
+
+if verbo == 'GAME_OVER' or verbo == 'STOP_MUSIC':
+
+> PLAY_MUSIC/STOP_MUSIC agregados a las palabras reservadas
+> para que no se los coma como parametro de la accion anterior.
+
+
+5. tracker.py (archivo nuevo, motor de canciones)
+
+> Sintetiza la partitura del JSON a .wav en el primer run,
+> con cache por contenido (md5) en temporal/brickscript_brick/.
+> Solo lento la primera vez por cancion.
+
+def ruta_cancion(nombre, notas):
+
+> Timbre: lead senoidal + bajo senoidal una octava abajo
+> (receta validada en pruebas: acompana sin competir).
+> Pico normalizado al 4%, igual que songs/ para no romper
+> el balance con el boton de mute.
+> OJO py2.7: wave no soporta `with`, se cierra explicito
+> con try/finally (error real encontrado probando).
+
+
+6. audio.py (modificado)
+
+> _resolver acepta rutas absolutas (canciones del .brick
+> en temporal) o nombres en songs/ como siempre:
+
+def _resolver(self, nombre_archivo):
+    if os.path.isabs(nombre_archivo) and os.path.isfile(nombre_archivo):
+        return os.path.normpath(nombre_archivo)
+
+> musica_actual ahora guarda la ruta completa, asi el
+> Mute/Unmute retoma tambien canciones del .brick.
+
+
+7. runtime.py (modificado)
+
+> Import con guarda por si falta el motor:
+
+try:
+    import tracker as MotorCanciones
+except ImportError:
+    MotorCanciones = None
+
+> Despacho en ejecutar_evento (vale para cualquier GAME_TYPE):
+
+if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
+if verbo == 'STOP_MUSIC': self.audio.detener_musica()
+
+> Sin bloque SONG el juego usa sus .wav como siempre:
+
+    def musica_brick(self, nombre):
+        canciones = self.datos_juego.get('songs', {})
+        if not nombre or nombre not in canciones:
+            return
+
+> Nombres inexistentes o canciones vacias se ignoran
+> en silencio (verificado: sin error).
+
+> PLAY_MUSIC es idempotente: ON_START se re-dispara en cada
+> spawn y antes reiniciaba el tema por pieza. Ahora compara
+> musica_actual + reproduciendo_musica y solo reproduce si
+> cambio el tema o estaba detenido (verificado: 3 spawns =
+> 1 reproduccion; tras STOP vuelve a sonar).
+
+> Retiro total del audio hardcodeado: se elimino el autoplay
+> por juego Y los 5 efectos del motor (rotar, explosion,
+> linea_clear, comer, game_over). Todo el audio sale del .brick;
+> sin SONG/EFFECT el juego es silencioso. game_over conserva
+> detener_musica() (callar no es sonar).
+
+
+8. Verificacion (Python 2.7 real, C:\Python27)
+
+> tetris.brick viejo compila: songs: {} y shapes intactos.
+> tetris_reborn.brick compila: TEMA_REBORN con 8 notas y
+> ON_START con SPAWN + PLAY_MUSIC.
+> musica_brick() real (sin ventana) sintetiza, reproduce
+> por MCI en loop y detiene limpio.
+
+> BUG REAL encontrado jugando: solo sonaban efectos, la musica
+> del .brick no. Causa: los nombres del JSON llegan como unicode
+> y MCI (winmm ANSI) rechaza comandos unicode con error 292.
+> Los .wav de songs/ sonaban porque esas rutas ya eran bytes.
+> Fix en dos fronteras: tracker.ruta_cancion() devuelve bytes
+> (encode mbcs) y audio._resolver() codifica a bytes lo que entre.
+> Verificado espiando MCI: open -> 0, play -> 0, loop re-dispara.
+
+
+9. Efectos en el .brick (DEFINE EFFECT + PLAY_EFFECT)
+
+> Misma receta que las canciones, pero suenan una sola vez:
+
+DEFINE EFFECT BEEP_LINEA:
+  NOTE A5 60
+  NOTE E6 120
+END
+
+ON LINE_CLEAR:
+  INCREASE_SCORE 100
+  PLAY_EFFECT BEEP_LINEA
+END
+
+> Gramatica: <efectos> ::= "" | <efecto> <efectos>, con
+> <efecto> ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END".
+> Reutiliza <notas>/<nota> de SONG, sin reglas duplicadas.
+> El programa queda: <tipo_juego> <grid> <definiciones>
+> <canciones> <efectos> <eventos>.
+
+> Compilador: parsear_efecto() comparte leer_notas() con las
+> canciones; el AST trae "effects": {} (vacio en .brick viejos).
+> PLAY_EFFECT agregado a palabras reservadas.
+
+> Runtime: PLAY_EFFECT -> efecto_brick() sintetiza con el mismo
+> motor pero reproduce con reproducir_efecto() (una vez, sin loop).
+> Nombres inexistentes se ignoran en silencio.
+
+> Fase 2 completada: eventos ON_ROTATE (Tetris), ON_EXPLOSION
+> (Tetris, rama de bombas/columnas) y ON_GAME_OVER (ambos juegos)
+> agregados a las gramaticas y al runtime. tetris_reborn.brick
+> los usa: BEEP_ROTAR, BEEP_BOMBA y FIN_JUEGO.
+> ON_ROTATE lleva guarda anti-recursion (_en_rotate): si el
+> .brick pone ROTATE dentro de ON ROTATE, la accion interna rota
+> una vez mas sin re-disparar (verificado con test: no cuelga).
+> Queda sin sonido lo que no tenga evento en el .brick (sin
+> PLAY_EFFECT el juego es silencioso en esa accion).

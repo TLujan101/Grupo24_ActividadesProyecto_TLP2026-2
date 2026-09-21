@@ -1,93 +1,108 @@
 ========================================================================
- GUÍA RÁPIDA: SISTEMA DE AUDIO NATIVO Y EVENTOS DEL JUEGO
+ GUIA RAPIDA: SISTEMA DE AUDIO (WAV + CANALES NATIVOS)
 ========================================================================
 
-1. ESTRUCTURA Y UBICACIÓN DE ARCHIVOS
+1. FILOSOFIA Y COMPATIBILIDAD
 ------------------------------------------------------------------------
-Todos los archivos de sonido deben guardarse en formato .WAV en la 
-carpeta 'songs' ubicada en la raíz del proyecto:
+- Exclusivo para Python 2.7 usando unicamente la biblioteca estandar
+  (ctypes, threading, subprocess, os, time).
+- Cero dependencias externas (sin pygame ni paquetes de pip).
+- Los sonidos son archivos .wav en TLP/songs/ (16-bit mono 22050 Hz).
+  Son assets fuente: SI se versionan en git (a diferencia de los
+  .json generados por compiler.py, que estan en .gitignore).
+- Amplitud calibrada al ~4%: picos reales medidos entre 2.5% y 4.4%,
+  volumen suave de fondo sin fatiga auditiva. No regenerar los .wav
+  sin recalibrar.
+- Multicanal real: musica y efectos suenan simultaneos sin cortarse.
+- Cierre limpio: detener_todo() libera aliases MCI y mata al
+  reproductor hijo en Linux antes de destruir la ventana.
 
-  TLP/
-  ├── songs/
-  │   ├── ost_tetris.wav       (Música de fondo)
-  │   ├── explosion.wav        (Efectos)
-  │   ├── linea_clear.wav
-  │   └── game_over.wav
-  ├── audio.py
-  └── runtime.py
-
-REQUISITO OBLIGATORIO DEL FORMATO .WAV:
-- Deben ser archivos WAV PCM Firmado de 16-bit (44.1 kHz).
-- No renombrar archivos .MP3 a .WAV directamente, ya que fallarán en 
-  el reproductor nativo del sistema.
-
-
-2. MÉTODOS PRINCIPALES DE GestorAudioNativo
+2. COMO SUENA EN CADA PLATAFORMA
 ------------------------------------------------------------------------
-La instancia del gestor de audio se accede desde tu clase principal 
-como 'self.audio'.
+* Windows: MCI via ctypes (winmm.dll). Un alias "bgm" para la musica
+  en bucle (hilo que re-dispara con poll de `status bgm mode`)
+  + 8 aliases rotativos "sfx_0..7" para efectos superpuestos.
+* Linux: subproceso por sonido (se autodetecta pw-play, paplay o
+  aplay; -q solo se pasa a aplay). La musica corre en un hilo que
+  re-lanza el reproductor por vuelta. detener_musica() mata al hijo
+  de forma sincronica para que no quede huerfano sonando al cerrar.
 
-* Reproducir música de fondo (en bucle infinito):
+3. ASSETS EN TLP/songs/
+------------------------------------------------------------------------
+  ost_tetris.wav   (musica de fondo Tetris, loop ~13 s)
+  ost_snake.wav    (musica de fondo Snake, loop ~3 s)
+  rotar.wav        (efecto al rotar pieza)
+  linea_clear.wav  (efecto al limpiar lineas)
+  explosion.wav    (efecto de bomba / limpia-columnas)
+  comer.wav        (efecto al comer en Snake)
+  game_over.wav    (efecto al terminar la partida)
+
+4. METODOS PRINCIPALES DE GestorAudioNativo
+------------------------------------------------------------------------
+* Musica de fondo en bucle (en su propio canal):
     self.audio.reproducir_musica_fondo("ost_tetris.wav")
 
-* Reproducir un efecto de sonido (no interrumpe la música):
-    self.audio.reproducir_efecto("explosion.wav")
+* Efecto simultaneo sin cortar la musica:
+    self.audio.reproducir_efecto("linea_clear.wav")
 
-* Detener la música actual de inmediato:
+* Detener la musica:
     self.audio.detener_musica()
 
-* Alternar Mute / Unmute (Silenciar / Activar todo):
+* Alternar Silencio (Mute / Unmute, retoma el tema actual):
     self.audio.alternar_silencio()
 
+* Liberar todo al salir del juego:
+    self.audio.detener_todo()
 
-3. CÓMO AÑADIR EFECTOS A NUEVOS EVENTOS
+5. INTEGRACION EN runtime.py
 ------------------------------------------------------------------------
-Para vincular un sonido a una acción en el juego, simplemente llama a 
-'self.audio.reproducir_efecto("nombre.wav")' dentro del método que 
-procesa el evento.
-
-A. En el sistema de eventos genérico (ej. ejecutar_evento):
-    def ejecutar_evento(self, evento):
-        if evento == 'ON_LINE_CLEAR':
-            self.audio.reproducir_efecto("linea_clear.wav")
-
-B. En la rotación de piezas (tetris_rotar_pieza):
-    def tetris_rotar_pieza(self):
-        # ... lógica de rotación ...
-        if rotacion_exitosa:
-            self.audio.reproducir_efecto("rotar.wav")
-
-C. En la fijación e impacto de Power-Ups (tetris_fijar_pieza):
-    def tetris_fijar_pieza(self):
-        # ...
-        if es_bomba or es_megabomba:
-            self.audio.reproducir_efecto("explosion.wav")
-        elif es_cruz or es_megacruz:
-            self.audio.reproducir_efecto("powerup.wav")
-
-D. Al perder la partida (procesar_game_over):
-    def procesar_game_over(self):
-        self.game_over = True
-        self.audio.detener_musica()
-        self.audio.reproducir_efecto("game_over.wav")
-
-
-4. INTEGRACIÓN CON BOTÓN EN TKINTER
-------------------------------------------------------------------------
-Para vincular el botón Mute/Unmute de la interfaz gráfica:
+- El gestor se crea en Juego.__init__ y el tema depende del juego:
+    self.audio = GestorAudioNativo("songs")
+    if self.tipo_juego == 'TETRIS':
+        self.audio.reproducir_musica_fondo("ost_tetris.wav")
+    elif self.tipo_juego == 'SNAKE':
+        self.audio.reproducir_musica_fondo("ost_snake.wav")
+- Boton de Mute/Unmute en el panel lateral (marco_score),
+  con estados "Audio: ON" (verde) / "Audio: OFF" (gris):
 
   self.btn_sonido = tk.Button(
-      self.root, 
-      text="Audio: ON", 
-      command=self.toggle_audio
+      self.marco_score,
+      text="Audio: ON",
+      command=self.toggle_audio,
+      font=("Consolas", 10, "bold"),
+      bg="#2a2a3e",
+      fg="#03a80b"
   )
+  self.btn_sonido.pack(pady=20, padx=10)
 
   def toggle_audio(self):
       silenciado = self.audio.alternar_silencio()
       if silenciado:
-          self.btn_sonido.config(text="Audio: OFF")
+          self.btn_sonido.config(text="Audio: OFF", fg="#888888")
       else:
-          self.btn_sonido.config(text="Audio: ON")
-          if not self.juego_terminado:
-              self.audio.reproducir_musica_fondo("ost_tetris.wav")
+          self.btn_sonido.config(text="Audio: ON", fg="#03a80b")
+- Efectos conectados a eventos: rotar (tetris_rotar_pieza),
+  linea_clear y explosion (aplicar_borrado_lineas), comer
+  (snake_mover_jugador), game_over (mostrar_game_over, que primero
+  detiene la musica). Todos con `hasattr(self, 'audio')` por
+  retrocompatibilidad.
+- Al cerrar (cerrar_ventana) se llama a detener_todo() antes de
+  destruir la ventana. Se usa os._exit(0) porque los hilos daemon
+  + Tk en Python 2.7 pueden colgar la salida normal.
+
+6. MUSICA PROGRAMADA EN EL .BRICK (OPCIONAL)
+------------------------------------------------------------------------
+- El .brick puede definir canciones (DEFINE SONG + NOTE <nombre> <ms>)
+  y dispararlas por eventos (PLAY_MUSIC / STOP_MUSIC). Detalle
+  completo en Changes/musica_brick_changes.txt.
+- Motor: TLP/tracker.py sintetiza la partitura del JSON a .wav
+  en temporal/brickscript_brick/ al primer run (con cache).
+- Sin bloque SONG/EFFECT el juego es silencioso: se elimino el
+  autoplay por juego y los 5 SFX hardcodeados del motor. Todo el
+  audio sale del .brick (PLAY_MUSIC/PLAY_EFFECT/STOP_MUSIC).
+- PLAY_MUSIC en ON START es el arranque normal de un tema.
+- Efectos: DEFINE EFFECT + PLAY_EFFECT (una sola vez, sin loop).
+  Los SFX hardcodeados del motor siguen igual; fase 2 seria
+  agregar eventos tipo ON_ROTATE para reemplazarlos desde el .brick.
+- El gestor acepta rutas absolutas ademas de nombres en songs/.
 ========================================================================

@@ -8,7 +8,7 @@ import json
 
 def lexer(codigo_fuente):
     codigo_fuente = re.sub(r'#.*', '', codigo_fuente)
-    token_regex = r'\b[A-Z_]+\b|\d+|[\[\](),:]'
+    token_regex = r'\b[A-G][0-9]+\b|\b[A-Z_]+\b|\d+|[\[\](),:]'
     tokens = re.findall(token_regex, codigo_fuente)
     return tokens
 
@@ -16,7 +16,7 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.posicion = 0
-        self.ast = {"tipo_juego": None, "config": {}, "shapes": {}, "events": {}}
+        self.ast = {"tipo_juego": None, "config": {}, "shapes": {}, "songs": {}, "effects": {}, "events": {}}
 
     def parse(self):
         while self.posicion < len(self.tokens):
@@ -26,7 +26,13 @@ class Parser:
             elif token_actual == 'GAME_GRID':
                 self.parsear_grid()
             elif token_actual == 'DEFINE':
-                self.parsear_shape()
+                siguiente = self.tokens[self.posicion + 1] if self.posicion + 1 < len(self.tokens) else None
+                if siguiente == 'SONG':
+                    self.parsear_cancion()
+                elif siguiente == 'EFFECT':
+                    self.parsear_efecto()
+                else:
+                    self.parsear_shape()
             elif token_actual == 'ON':
                 self.parsear_evento()
             else:
@@ -88,6 +94,40 @@ class Parser:
         self.consumir('END')
         self.ast['shapes'][nombre_shape] = {"estados": estados, "color": color_shape, "chance": chance_shape}
 
+    NOTAS_SEMITONO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+    def nota_a_hz(self, letra, octava):
+        midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra]
+        return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
+
+    def parsear_cancion(self):
+        self.consumir('DEFINE')
+        self.consumir('SONG')
+        nombre_song = self.consumir()
+        self.consumir(':')
+        self.ast['songs'][nombre_song] = {"notas": self.leer_notas()}
+        self.consumir('END')
+
+    def parsear_efecto(self):
+        self.consumir('DEFINE')
+        self.consumir('EFFECT')
+        nombre_efecto = self.consumir()
+        self.consumir(':')
+        self.ast['effects'][nombre_efecto] = {"notas": self.leer_notas()}
+        self.consumir('END')
+
+    def leer_notas(self):
+        notas = []
+        while self.posicion < len(self.tokens) and self.tokens[self.posicion] == 'NOTE':
+            self.consumir('NOTE')
+            token_nota = self.consumir()
+            letra, octava = token_nota[0], token_nota[1:]
+            if letra not in self.NOTAS_SEMITONO or not octava.isdigit():
+                raise Exception("Error de sintaxis: nota '" + token_nota + "' no valida (use A-G mas octava, ej. E5)")
+            ms = int(self.consumir())
+            notas.append([self.nota_a_hz(letra, int(octava)), ms])
+        return notas
+
 
     # --- FUNCION CORREGIDA ---
     def parsear_evento(self):
@@ -99,7 +139,7 @@ class Parser:
             verbo = self.consumir()
 
             # Si el comando es de una sola palabra, lo anadimos y continuamos
-            if verbo == 'GAME_OVER':
+            if verbo == 'GAME_OVER' or verbo == 'STOP_MUSIC':
                 acciones.append({'accion': verbo, 'objeto': None, 'params': []})
                 continue
 
@@ -117,7 +157,7 @@ class Parser:
                     y = int(self.consumir())
                     self.consumir(')')
                     params.append([x, y])
-            elif self.posicion < len(self.tokens) and self.tokens[self.posicion] not in ['END', 'ON', 'DEFINE', 'SPAWN', 'MOVE', 'ROTATE', 'INCREASE_SCORE', 'SET_DIRECTION', 'GROW', 'GAME_OVER']:
+            elif self.posicion < len(self.tokens) and self.tokens[self.posicion] not in ['END', 'ON', 'DEFINE', 'SPAWN', 'MOVE', 'ROTATE', 'INCREASE_SCORE', 'SET_DIRECTION', 'GROW', 'GAME_OVER', 'PLAY_MUSIC', 'STOP_MUSIC', 'PLAY_EFFECT']:
                 params.append(self.consumir())
             acciones.append({'accion': verbo, 'objeto': objeto, 'params': params})
         self.consumir('END')
