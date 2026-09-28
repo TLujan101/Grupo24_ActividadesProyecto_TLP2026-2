@@ -1,0 +1,8 @@
+# Finales de linea: en el repo todo queda con LF (Unix) y cada quien lo
+# recibe como corresponda a su sistema. Excepciones:
+#   - .bat siempre CRLF: cmd.exe falla con goto/call :etiqueta si tiene LF.
+#   - .sh siempre LF: bash falla con CRLF ("\r: command not found").
+* text=auto
+*.bat text eol=crlf
+*.sh text eol=lf
+*.pdf binary

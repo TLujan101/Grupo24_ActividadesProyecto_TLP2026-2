@@ -1,0 +1,77 @@
+# Verifica cada PR hacia main. Cada grupo es un job aparte, asi en el PR
+# aparece un check por grupo y se ve de inmediato cual fallo:
+#   - Compilacion: el codigo Python compila, pasa pyflakes y los .brick compilan.
+#   - Tests <grupo>: un job por archivo de tests (ver la matriz abajo).
+#     Cada archivo tests/test_*.py nuevo debe agregarse a la matriz.
+#
+# Para correr lo mismo en local (desde TLP/):
+#   python2 -m unittest discover -s tests -t . -v
+
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# setup-python ya no ofrece 2.7; se usa la imagen oficial de Python 2.7
+# (Debian buster), que ya trae Tkinter.
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+defaults:
+  run:
+    working-directory: TLP
+
+jobs:
+  compilacion:
+    name: Compilacion
+    runs-on: ubuntu-latest
+    container: python:2.7.18-buster
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Entorno
+        run: |
+          python --version
+          python -c "import Tkinter; print('Tk %s' % Tkinter.TkVersion)"
+          pip install --quiet pyflakes==2.0.0
+
+      - name: El codigo Python compila
+        run: python -m compileall -q compiler.py runtime.py engine tests
+
+      - name: Pyflakes (nombres sin definir, imports rotos, etc.)
+        run: python -m pyflakes compiler.py runtime.py engine tests
+
+      - name: Todos los juegos de games/ compilan
+        run: |
+          for brick in games/*.brick; do
+            python compiler.py "$brick" || exit 1
+          done
+
+  tests:
+    name: Tests ${{ matrix.grupo }}
+    runs-on: ubuntu-latest
+    container: python:2.7.18-buster
+    strategy:
+      # Si un grupo falla, los demas siguen corriendo para ver todo el panorama
+      fail-fast: false
+      matrix:
+        include:
+          - grupo: Retrocompatibilidad (juegos clasicos sin reborn ni remake)
+            modulo: tests.test_retrocompatibilidad
+          - grupo: Game (clase base)
+            modulo: tests.test_game
+          - grupo: Tetris
+            modulo: tests.test_tetris
+          - grupo: Snake
+            modulo: tests.test_snake
+          - grupo: Integracion (compilador + runtime)
+            modulo: tests.test_juegos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ${{ matrix.grupo }}
+        run: python -m unittest -v ${{ matrix.modulo }}
+

@@ -8,3 +8,30 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 - [ ] Actividad 4: Snake+ (27 oct)
 - [ ] Actividad 5: Tanks (17 nov)
 - [ ] Actividad 6: Integración (07 dic)
+
+## Estructura de `TLP/`
+```
+TLP/
+├── compiler.py      Compilador: traduce un .brick a .json
+├── runtime.py       Carga el .json y arranca el juego correspondiente
+├── jugar.bat        Compila y juega (Windows)
+├── jugar.sh         Compila y juega (Linux)
+├── games/           Código BrickScript (.brick) de cada juego y sus variantes
+├── engine/          Lógica en Python de cada tipo de juego (Tetris, Snake, ...)
+├── grammars/        Gramáticas BNF del lenguaje
+├── docs/            Documentación, registro de cambios y errores conocidos
+├── songs/           Música
+└── tests/           Tests automáticos
+```
+
+## Tests
+Cada PR hacia `main` corre [`.github/workflows/tests.yml`](.github/workflows/tests.yml), que verifica:
+1. Que todo el código Python compila (y pasa pyflakes).
+2. Que todos los `.brick` de `TLP/games/` compilan.
+3. **Retrocompatibilidad:** los juegos clásicos (los `.brick` sin *reborn* ni *remake* en el nombre) siguen funcionando con el compilador y el motor actuales.
+4. Todos los tests unitarios y de integración.
+
+Para correrlos en local (desde `TLP/`):
+```
+python2 -m unittest discover -s tests -t . -v
+```
