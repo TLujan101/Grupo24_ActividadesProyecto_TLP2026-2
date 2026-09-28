@@ -28,6 +28,9 @@ def datos_snake(inicio=(2, 2)):
             'ON_COLLISION_WALL': [accion('GAME_OVER')],
             'ON_COLLISION_SELF': [accion('GAME_OVER')],
             'ON_KEY_UP': [accion('SET_DIRECTION', 'UP')],
+            'ON_KEY_DOWN': [accion('SET_DIRECTION', 'DOWN')],
+            'ON_KEY_LEFT': [accion('SET_DIRECTION', 'LEFT')],
+            'ON_KEY_RIGHT': [accion('SET_DIRECTION', 'RIGHT')],
         },
     }
 
@@ -101,18 +104,66 @@ class TestSnake(TestSnakeBase):
         self.assertEqual(juego.puntuacion, 10)
         self.assertEqual(juego.posicion_comida, (0, 4))
 
+    def test_crecer_cantidad(self):
+        # GROW PLAYER 3 crece 3 en total (1 al comer + 2 en los siguientes ticks)
+        datos = datos_snake()
+        datos['events']['ON_EAT_FOOD'] = [accion('GROW', 'PLAYER', ['3'])]
+        juego = Snake(datos)
+        juego.posicion_comida = (3, 2)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(len(juego.serpiente_cuerpo), 2)
+        juego.snake_cambiar_direccion('UP')
+        juego.ejecutar_evento('ON_TICK')
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(len(juego.serpiente_cuerpo), 4)
+
+        # Sin GROW en el .brick, comer no hace crecer
+        datos = datos_snake()
+        datos['events']['ON_EAT_FOOD'] = []
+        juego = Snake(datos)
+        juego.posicion_comida = (3, 2)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.serpiente_cuerpo, [(3, 2)])
+
     def test_direccion(self):
         juego = Snake(datos_snake())
-        # No puede dar media vuelta
+        juego.posicion_comida = (4, 4)   # lejos de la ruta, para no comer a mitad
+        # No puede dar media vuelta (un giro por tick)
         for tecla, esperada in [('LEFT', (1, 0)), ('UP', (0, -1)), ('DOWN', (0, -1)),
                                 ('LEFT', (-1, 0)), ('RIGHT', (-1, 0)), ('DOWN', (0, 1))]:
             juego.snake_cambiar_direccion(tecla)
+            juego.ejecutar_evento('ON_TICK')
             self.assertEqual(juego.serpiente_direccion, esperada, tecla)
         # Teclas del teclado
         for tecla, esperada in [('Left', (-1, 0)), ('Up', (0, -1)), ('Right', (1, 0)),
                                 ('Down', (0, 1)), ('a', (0, 1))]:
             juego.manejar_input_gui(EventoFalso(tecla))
+            juego.ejecutar_evento('ON_TICK')
             self.assertEqual(juego.serpiente_direccion, esperada, tecla)
+
+        # Los controles los define el .brick: sin ON_KEY_LEFT, Left no hace nada
+        datos = datos_snake()
+        del datos['events']['ON_KEY_LEFT']
+        juego = Snake(datos)
+        juego.manejar_input_gui(EventoFalso('Up'))
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.serpiente_direccion, (0, -1))
+        juego.manejar_input_gui(EventoFalso('Left'))
+        self.assertEqual(juego.serpiente_direccion, (0, -1))
+
+    def test_doble_giro_rapido_no_mata(self):
+        # Yendo a la derecha, ABAJO + IZQUIERDA antes del tick: antes el
+        # segundo giro mataba contra el propio cuerpo; ahora solo vale el primero
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(3, 2), (2, 2), (1, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.posicion_comida = (0, 0)
+        juego.snake_cambiar_direccion('DOWN')
+        juego.snake_cambiar_direccion('LEFT')
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_direccion, (0, 1))
+        self.assertEqual(juego.serpiente_cuerpo[0], (3, 3))
 
     def test_dibujar_comida_y_serpiente(self):
         juego = Snake(datos_snake())

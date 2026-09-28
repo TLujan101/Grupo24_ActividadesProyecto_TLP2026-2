@@ -142,7 +142,11 @@ class Game(object):
             for accion in self.datos_juego['events'][nombre_evento]:
                 verbo, objeto = accion.get('accion'), accion.get('objeto')
 
-                if verbo == 'INCREASE_SCORE': self.puntuacion += int(objeto)
+                if verbo == 'INCREASE_SCORE':
+                    try:
+                        self.puntuacion += int(objeto)
+                    except (ValueError, TypeError):
+                        pass
                 if verbo == 'GAME_OVER': self.juego_terminado = True
 
                 # Acciones propias de cada juego

@@ -14,11 +14,10 @@ class Tetris(Game):
     # ----------------------------------------------------
 
     def inicializar_estado(self):
-        self.rainbow_grid = [[False for _ in range(self.ancho)] for _ in range(self.alto)]
         self.pieza_actual = None
         self.pieza_color = "#00FFFF"
-        # Premio garantizado: pasa a True al limpiar, el proximo spawn es POWERUP.
-        self.powerup_pendiente = False
+        self.pieza_es_arcoiris = False
+        self.siguiente_powerup = None
         self._nombres_piezas = []
         self._pesos_piezas = []
         for NombrePool in self.datos_juego['shapes'].keys():
@@ -46,11 +45,6 @@ class Tetris(Game):
         if verbo == 'MOVE': self.tetris_mover_pieza(accion['params'][0])
         if verbo == 'ROTATE': self.tetris_rotar_pieza()
 
-    def color_celda_grid(self, x, y):
-        if self.rainbow_grid[y][x] == True:
-            return Arcoiris[(self.frame // 6) % len(Arcoiris)]
-        return Game.color_celda_grid(self, x, y)
-
     def dibujar_elementos(self):
         # Dibujar la pieza actual de Tetris
         if self.pieza_actual:
@@ -58,7 +52,7 @@ class Tetris(Game):
             for y_offset, fila in enumerate(matriz_pieza):
                 for x_offset, celda in enumerate(fila):
                     if celda == 1:
-                        if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
+                        if getattr(self, 'pieza_es_arcoiris', False):
                             color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
                         else:
                             color = self.pieza_color
@@ -77,6 +71,8 @@ class Tetris(Game):
             texto_notif = "Power Up:LIMPIA COLUMNAS"
         elif nombre_powerup == "POWERUP":
                     texto_notif = "Power Up:BOMBA"
+        else:
+            return
 
         notif = tk.Label(
             self.root,
@@ -96,7 +92,7 @@ class Tetris(Game):
         self.root.after(2500, notif.destroy)
 
     def tetris_spawn_pieza(self):
-        if hasattr(self, 'siguiente_powerup') and self.siguiente_powerup:
+        if self.siguiente_powerup:
             nombre_pieza = self.siguiente_powerup
             self.siguiente_powerup = None
         else:
@@ -109,15 +105,13 @@ class Tetris(Game):
             self.pieza_actual = Datos["estados"]
             # Asignamos el color original definido en la forma o RAINBOW
             self.pieza_color = Colores.get(Datos.get("color", "CYAN"), "#00FFFF")
+            self.pieza_es_arcoiris = (Datos.get("color", "CYAN") == "RAINBOW")
         else:
             self.pieza_actual = Datos
             self.pieza_color = "#00FFFF"
+            self.pieza_es_arcoiris = False
 
-        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho / 2 - 1, 0, 0
-        if self.tetris_verificar_colision(self.pieza_x, self.pieza_y, self.pieza_rotacion):
-            self.juego_terminado = True
-
-        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho / 2 - 1, 0, 0
+        self.pieza_x, self.pieza_y, self.pieza_rotacion = self.ancho // 2 - 1, 0, 0
         if self.tetris_verificar_colision(self.pieza_x, self.pieza_y, self.pieza_rotacion):
             self.juego_terminado = True
 
@@ -154,7 +148,6 @@ class Tetris(Game):
                     nx, ny = centro_x + dx, centro_y + dy
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
                         self.grid[ny][nx] = 0
-                        self.rainbow_grid[ny][nx] = False
             self.puntuacion += 150
 
         elif es_superbomba:
@@ -166,7 +159,6 @@ class Tetris(Game):
                     ny = base_y + dy
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
                         self.grid[ny][nx] = 0
-                        self.rainbow_grid[ny][nx] = False
             self.puntuacion += 350
 
         elif es_limpia_columnas:
@@ -182,7 +174,6 @@ class Tetris(Game):
             for px in columnas_a_borrar:
                 for py in range(self.alto):
                     self.grid[py][px] = 0
-                    self.rainbow_grid[py][px] = False
 
             self.puntuacion += len(columnas_a_borrar) * 250
 
@@ -197,13 +188,10 @@ class Tetris(Game):
 
             for py in filas_a_borrar:
                 self.grid[py] = [0] * self.ancho
-                self.rainbow_grid[py] = [False] * self.ancho
 
             for py in sorted(list(filas_a_borrar)):
                 self.grid.pop(py)
                 self.grid.insert(0, [0] * self.ancho)
-                self.rainbow_grid.pop(py)
-                self.rainbow_grid.insert(0, [False] * self.ancho)
 
             self.puntuacion += len(filas_a_borrar) * 200
 
@@ -236,25 +224,24 @@ class Tetris(Game):
         lineas_limpias = len(Llenas)
         if lineas_limpias == 0:
             return
-        Bonus = sum(1 for i in Llenas for x in range(self.ancho) if self.rainbow_grid[i][x])
         self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.grid) if i not in Llenas]
-        self.rainbow_grid = [[False] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.rainbow_grid) if i not in Llenas]
         for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
-        for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
-        # TESTING: con 1 linea ya da premio (para entrega volver a >= 3 = triple).
-        if lineas_limpias >= 1:
+        # Triple (>= 3) da premio; simple/doble solo puntaje.
+        if lineas_limpias >= 3:
             eleccion = random.random()
             if eleccion < 0.25:
-                self.siguiente_powerup = 'POWERUP'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.25 and eleccion < 0.45:
-                self.siguiente_powerup = 'CLEAR_LINE_PIECE'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.45 and eleccion < 0.65:
-                self.siguiente_powerup = 'SUPERBOMBA'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.65 and eleccion < 0.80:
-                self.siguiente_powerup = "CLEAR_THREE_PIECE"
+                candidato = 'POWERUP'
+            elif eleccion < 0.45:
+                candidato = 'CLEAR_LINE_PIECE'
+            elif eleccion < 0.65:
+                candidato = 'SUPERBOMBA'
+            elif eleccion < 0.80:
+                candidato = "CLEAR_THREE_PIECE"
+            else:
+                candidato = None
+            # Solo vale si el .brick define esa forma; si no, no hay premio.
+            if candidato in self.datos_juego['shapes']:
+                self.siguiente_powerup = candidato
                 self.mostrar_notificacion_powerup(self.siguiente_powerup)
             else:
                 self.siguiente_powerup = None

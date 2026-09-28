@@ -39,7 +39,6 @@ def datos_tetris():
             'ON_KEY_LEFT': [accion('MOVE', 'CURRENT_PIEZA', ['LEFT'])],
             'ON_KEY_RIGHT': [accion('MOVE', 'CURRENT_PIEZA', ['RIGHT'])],
             'ON_LINE_CLEAR': [accion('INCREASE_SCORE', '100')],
-            'ON_RAINBOW_LINE_CLEAR': [accion('INCREASE_SCORE', '7')],
         },
     }
 
@@ -69,7 +68,6 @@ class TestTetris(TestTetrisBase):
     def test_inicio(self):
         juego = Tetris(datos_tetris())
         self.assertEqual(juego.velocidad_gravedad, 0.4)
-        self.assertEqual(juego.rainbow_grid, [[False] * 6 for _ in range(6)])
         # Pool de piezas con sus pesos; POWERUP nunca sale al azar
         pool = dict(zip(juego._nombres_piezas, juego._pesos_piezas))
         self.assertNotIn('POWERUP', pool)
@@ -225,12 +223,9 @@ class TestTetris(TestTetrisBase):
 
         juego.grid[4] = [1] * 6
         juego.grid[5] = [1] * 6
-        juego.rainbow_grid[5][0] = True
-        juego.rainbow_grid[5][1] = True
         juego.tetris_limpiar_lineas()
         self.assertEqual(juego.grid[5], [1, 0, 0, 0, 0, 0])
-        self.assertEqual(juego.rainbow_grid[5], [False] * 6)
-        self.assertEqual(juego.puntuacion, 2 * 100 + 2 * 7)   # 2 lineas + bonus arcoiris
+        self.assertEqual(juego.puntuacion, 2 * 100)   # 2 lineas
 
     def test_sorteo_de_power_up(self):
         casos = [(0.1, 'POWERUP', 'Power Up:BOMBA'),
@@ -238,11 +233,15 @@ class TestTetris(TestTetrisBase):
                  (0.5, 'SUPERBOMBA', 'Power Up:SUPERBOMBA'),
                  (0.7, 'CLEAR_THREE_PIECE', 'Power Up:LIMPIA COLUMNAS'),
                  (0.9, None, None),
-                 # Comportamiento actual: los limites exactos no dan premio
-                 (0.25, None, None)]
+                 # Los limites exactos caen en el rango superior
+                 (0.25, 'CLEAR_LINE_PIECE', 'Power Up:LIMPIA LINEAS'),
+                 (0.45, 'SUPERBOMBA', 'Power Up:SUPERBOMBA'),
+                 (0.65, 'CLEAR_THREE_PIECE', 'Power Up:LIMPIA COLUMNAS')]
         for valor, powerup, texto in casos:
             self.forzar_random(valor)
             juego = Tetris(datos_tetris())
+            juego.grid[3] = [1] * 6
+            juego.grid[4] = [1] * 6
             juego.grid[5] = [1] * 6
             juego.tetris_limpiar_lineas()
             self.assertEqual(juego.siguiente_powerup, powerup, valor)
@@ -251,12 +250,24 @@ class TestTetris(TestTetrisBase):
                 self.assertEqual(notif.opciones.get('text'), texto)
                 self.assertEqual(juego.root.afters[-1], (2500, notif.destroy))
 
+        # Simple/doble no dan premio (solo triple)
+        for filas in (1, 2):
+            self.forzar_random(0.1)
+            juego = Tetris(datos_tetris())
+            for i in range(filas):
+                juego.grid[5 - i] = [1] * 6
+            juego.tetris_limpiar_lineas()
+            self.assertEqual(juego.siguiente_powerup, None, filas)
+
         # La siguiente pieza es el power up sorteado
         self.forzar_random(0.1)
         juego = Tetris(datos_tetris())
-        juego.grid[5] = [1, 1, 0, 0, 1, 1]
-        for _ in range(5):
-            juego.ejecutar_evento('ON_TICK')
+        juego.grid[3] = [1] * 6
+        juego.grid[4] = [1] * 6
+        juego.grid[5] = [1] * 6
+        juego.tetris_limpiar_lineas()
+        self.assertEqual(juego.siguiente_powerup, 'POWERUP')
+        juego.tetris_spawn_pieza()
         self.assertEqual((juego.pieza_nombre, juego.siguiente_powerup), ('POWERUP', None))
 
     def test_dibujar(self):
@@ -274,15 +285,14 @@ class TestTetris(TestTetrisBase):
         juego.dibujar()
         self.assertEqual(juego.canvas.rectangulos, [((50, 0, 75, 25), Arcoiris[2])])
 
-        # Celdas fijas: normales en gris, las arcoiris con su color
+        # Celdas fijas: siempre en gris
         juego.pieza_actual = None
         juego.grid[5][0] = 1
         juego.grid[5][1] = 1
-        juego.rainbow_grid[5][1] = True
         juego.frame = -1
         juego.dibujar()
         self.assertEqual(juego.canvas.rectangulos,
-                         [((0, 125, 25, 150), COLOR_GRID_FIJA), ((25, 125, 50, 150), Arcoiris[0])])
+                         [((0, 125, 25, 150), COLOR_GRID_FIJA), ((25, 125, 50, 150), COLOR_GRID_FIJA)])
 
 
 if __name__ == '__main__':

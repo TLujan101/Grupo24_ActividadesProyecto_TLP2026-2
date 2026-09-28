@@ -10,6 +10,9 @@ def lexer(codigo_fuente):
     codigo_fuente = re.sub(r'#.*', '', codigo_fuente)
     token_regex = r'\b[A-Z_]+\b|\d+|[\[\](),:]'
     tokens = re.findall(token_regex, codigo_fuente)
+    resto = re.sub(token_regex, '', codigo_fuente)
+    if resto.strip():
+        raise Exception("Caracteres no reconocidos: '" + resto.strip()[:40] + "'")
     return tokens
 
 class Parser:
@@ -44,6 +47,21 @@ class Parser:
             raise Exception("Error de sintaxis: Se esperaba '" + token_esperado + "' pero se llego al final del archivo.")
         return None
 
+    def ver(self):
+        # Proximo token o None si se acabo (evita IndexError en .brick truncados)
+        if self.posicion < len(self.tokens):
+            return self.tokens[self.posicion]
+        return None
+
+    def consumir_numero(self):
+        token = self.consumir()
+        if token is None:
+            raise Exception("Error de sintaxis: se esperaba un numero pero se llego al final del archivo.")
+        try:
+            return int(token)
+        except ValueError:
+            raise Exception("Error de sintaxis: se esperaba un numero pero se encontro '" + token + "'")
+
     def parsear_tipo_juego(self):
         self.consumir('GAME_TYPE')
         self.ast['tipo_juego'] = self.consumir()
@@ -51,9 +69,9 @@ class Parser:
     def parsear_grid(self):
         self.consumir('GAME_GRID')
         self.consumir('(')
-        ancho = int(self.consumir())
+        ancho = self.consumir_numero()
         self.consumir(',')
-        alto = int(self.consumir())
+        alto = self.consumir_numero()
         self.consumir(')')
         self.ast['config']['grid_size'] = [ancho, alto]
 
@@ -63,12 +81,12 @@ class Parser:
         nombre_shape = self.consumir()
         color_shape = "CYAN"
         chance_shape = 10
-        if self.tokens[self.posicion] == "COLOR":
+        if self.ver() == "COLOR":
             self.consumir("COLOR");
             color_shape = self.consumir()
-        if self.tokens[self.posicion] == "CHANCE":
+        if self.ver() == "CHANCE":
             self.consumir("CHANCE");
-            chance_shape = int(self.consumir())
+            chance_shape = self.consumir_numero()
         self.consumir(':')
         estados = []
         while self.posicion < len(self.tokens) and self.tokens[self.posicion] == 'STATE':
@@ -76,12 +94,14 @@ class Parser:
             self.consumir()
             self.consumir(':')
             matriz = []
-            while self.posicion < len(self.tokens) and self.tokens[self.posicion] == '[':
+            while self.ver() == '[':
                 fila = []
                 self.consumir('[')
-                while self.tokens[self.posicion] != ']':
-                    fila.append(int(self.consumir()))
-                    if self.tokens[self.posicion] == ',': self.consumir(',')
+                while self.ver() != ']':
+                    if self.ver() is None:
+                        raise Exception("Error de sintaxis: fila sin ']' antes del fin del archivo.")
+                    fila.append(self.consumir_numero())
+                    if self.ver() == ',': self.consumir(',')
                 self.consumir(']')
                 matriz.append(fila)
             estados.append(matriz)
@@ -106,19 +126,24 @@ class Parser:
             # Si no, parseamos el resto de la accion
             objeto = self.consumir()
             params = []
-            if self.posicion < len(self.tokens) and self.tokens[self.posicion] == 'AT':
+            if self.ver() == 'AT':
                 self.consumir('AT')
-                if self.tokens[self.posicion] == 'RANDOM':
+                if self.ver() == 'RANDOM':
                     params.append(self.consumir())
                 else:
                     self.consumir('(')
-                    x = int(self.consumir())
+                    x = self.consumir_numero()
                     self.consumir(',')
-                    y = int(self.consumir())
+                    y = self.consumir_numero()
                     self.consumir(')')
                     params.append([x, y])
-            elif self.posicion < len(self.tokens) and self.tokens[self.posicion] not in ['END', 'ON', 'DEFINE', 'SPAWN', 'MOVE', 'ROTATE', 'INCREASE_SCORE', 'SET_DIRECTION', 'GROW', 'GAME_OVER']:
+            elif self.ver() not in ['END', 'ON', 'DEFINE', 'SPAWN', 'MOVE', 'ROTATE', 'INCREASE_SCORE', 'SET_DIRECTION', 'GROW', 'GAME_OVER', None]:
                 params.append(self.consumir())
+            if verbo == 'INCREASE_SCORE':
+                try:
+                    int(objeto)
+                except (ValueError, TypeError):
+                    raise Exception("Error de sintaxis: INCREASE_SCORE necesita un numero, se encontro '" + str(objeto) + "'")
             acciones.append({'accion': verbo, 'objeto': objeto, 'params': params})
         self.consumir('END')
         self.ast['events'][nombre_evento] = acciones
