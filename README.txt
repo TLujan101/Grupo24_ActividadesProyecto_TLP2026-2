@@ -15,7 +15,7 @@ Los pasos de instalacion estan en INSTALL.txt (en la raiz del repositorio).
 
 Para compilar y ejecutar un juego, hemos creado un script que hace todo el trabajo por ti.
 
-1. Abre una terminal dentro de la carpeta TLP del proyecto.
+1. Abre una terminal en la carpeta raiz del proyecto.
 
 2. Ejecuta el script de tu sistema seguido del nombre del juego (el nombre
    del archivo en games/ sin la extension .brick) o de su numero en el menu:

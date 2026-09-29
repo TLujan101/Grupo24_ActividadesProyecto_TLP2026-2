@@ -40,7 +40,7 @@ Para que los scripts funcionen correctamente, los archivos deben estar organizad
     |
     +--- engine\             (Logica en Python de cada tipo de juego)
     +--- grammars\           (Gramaticas BNF del lenguaje)
-    +--- docs\               (Documentacion, cambios y errores conocidos)
+    +--- docs\               (Documentacion y registro de cambios)
     +--- songs\              (Musica)
     \--- tests\              (Tests automaticos)
 

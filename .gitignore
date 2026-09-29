@@ -11,7 +11,7 @@ __pycache__/
 *.pyc
 
 # Generados por compiler.py a partir de los .brick (no versionar)
-TLP/games/*.json
+games/*.json
 
 # Editores / sistema
 .vscode/

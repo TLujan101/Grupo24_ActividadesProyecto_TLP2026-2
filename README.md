@@ -9,9 +9,8 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 - [ ] Actividad 5: Tanks (17 nov)
 - [ ] Actividad 6: Integración (07 dic)
 
-## Estructura de `TLP/`
+## Estructura del repositorio
 ```
-TLP/
 ├── compiler.py      Compilador: traduce un .brick a .json
 ├── runtime.py       Carga el .json y arranca el juego correspondiente
 ├── jugar.bat        Compila y juega (Windows)
@@ -19,19 +18,29 @@ TLP/
 ├── games/           Código BrickScript (.brick) de cada juego y sus variantes
 ├── engine/          Lógica en Python de cada tipo de juego (Tetris, Snake, ...)
 ├── grammars/        Gramáticas BNF del lenguaje
-├── docs/            Documentación, registro de cambios y errores conocidos
+├── docs/            Documentación y registro de cambios
 ├── songs/           Música
-└── tests/           Tests automáticos
+├── tests/           Tests automáticos
+├── .githooks/       Hook de pre-commit (corre los tests)
+├── INSTALL.txt      Requisitos e instalación
+└── README.txt       Guía del lenguaje BrickScript
 ```
 
 ## Tests
 Cada PR hacia `main` corre [`.github/workflows/tests.yml`](.github/workflows/tests.yml), que verifica:
 1. Que todo el código Python compila (y pasa pyflakes).
-2. Que todos los `.brick` de `TLP/games/` compilan.
+2. Que todos los `.brick` de `games/` compilan.
 3. **Retrocompatibilidad:** los juegos clásicos (los `.brick` sin *reborn* ni *remake* en el nombre) siguen funcionando con el compilador y el motor actuales.
 4. Todos los tests unitarios y de integración.
 
-Para correrlos en local (desde `TLP/`):
+Para correrlos en local (desde la raíz del repo):
 ```
 python2 -m unittest discover -s tests -t . -v
 ```
+
+## Pre-commit (una sola vez por clon)
+Antes de cada commit se corren los tests y, si alguno falla, el commit se cancela. Se activa con:
+```
+git config core.hooksPath .githooks
+```
+Si no lo activas, igual el PR no se puede mezclar con los checks en rojo. No uses `--no-verify` para saltarte el hook.
