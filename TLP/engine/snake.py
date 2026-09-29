@@ -23,13 +23,6 @@ class Snake(Game):
         self.crecimiento_pendiente = 0
         self.velocidad_gravedad = 0.15
 
-    def manejar_tecla(self, key):
-        # Los controles los define el .brick via ON_KEY_* (igual que Tetris)
-        if key == 'UP': self.ejecutar_evento('ON_KEY_UP')
-        elif key == 'DOWN': self.ejecutar_evento('ON_KEY_DOWN')
-        elif key == 'LEFT': self.ejecutar_evento('ON_KEY_LEFT')
-        elif key == 'RIGHT': self.ejecutar_evento('ON_KEY_RIGHT')
-
     def ejecutar_accion(self, verbo, objeto, accion):
         if verbo == 'SPAWN' and objeto == 'PLAYER': self.snake_spawn_jugador(accion)
         if verbo == 'SPAWN' and objeto == 'FOOD': self.snake_spawn_comida()

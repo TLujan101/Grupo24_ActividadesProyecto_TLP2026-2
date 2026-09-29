@@ -8,7 +8,6 @@
 # Cada juego concreto (Tetris, Snake, ...) hereda de Game y sobreescribe
 # estos metodos:
 #   - inicializar_estado(): variables propias del juego y velocidad_gravedad.
-#   - manejar_tecla(key):   que hacer con cada tecla (UP, DOWN, LEFT, RIGHT).
 #   - ejecutar_accion(verbo, objeto, accion): acciones propias del juego.
 #   - dibujar_elementos():  dibuja lo que no es la cuadricula fija.
 #   - color_celda_grid(x, y): (opcional) color de una celda fija.
@@ -76,10 +75,6 @@ class Game(object):
         # Debe crear las variables propias del juego y self.velocidad_gravedad
         raise NotImplementedError("El juego debe implementar inicializar_estado()")
 
-    def manejar_tecla(self, key):
-        # key es 'UP', 'DOWN', 'LEFT', 'RIGHT' u otra tecla en mayusculas
-        raise NotImplementedError("El juego debe implementar manejar_tecla()")
-
     def ejecutar_accion(self, verbo, objeto, accion):
         # Acciones propias del juego (SPAWN, MOVE, ROTATE, GROW, ...)
         raise NotImplementedError("El juego debe implementar ejecutar_accion()")
@@ -134,8 +129,14 @@ class Game(object):
 
         # La opcion de salir con 'Q' ha sido eliminada.
 
-        # Cada juego decide que hace con la tecla
         self.manejar_tecla(key)
+
+    def manejar_tecla(self, key):
+        # Las flechas disparan el evento ON_KEY_* del .brick; el juego
+        # concreto decide que hace cada accion en ejecutar_accion().
+        # Un juego que necesite otras teclas puede sobreescribir este metodo.
+        if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
+            self.ejecutar_evento('ON_KEY_' + key)
 
     def ejecutar_evento(self, nombre_evento):
         if nombre_evento in self.datos_juego['events']:

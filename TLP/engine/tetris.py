@@ -33,13 +33,6 @@ class Tetris(Game):
         self.pieza_x, self.pieza_y, self.pieza_rotacion = 0, 0, 0
         self.velocidad_gravedad = 0.4
 
-    def manejar_tecla(self, key):
-        # Mapeo de teclas de flecha
-        if key == 'UP': self.ejecutar_evento('ON_KEY_UP')
-        elif key == 'DOWN': self.ejecutar_evento('ON_KEY_DOWN')
-        elif key == 'LEFT': self.ejecutar_evento('ON_KEY_LEFT')
-        elif key == 'RIGHT': self.ejecutar_evento('ON_KEY_RIGHT')
-
     def ejecutar_accion(self, verbo, objeto, accion):
         if verbo == 'SPAWN': self.tetris_spawn_pieza()
         if verbo == 'MOVE': self.tetris_mover_pieza(accion['params'][0])

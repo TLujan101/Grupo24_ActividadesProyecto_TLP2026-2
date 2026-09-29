@@ -11,12 +11,8 @@ class JuegoPrueba(Game):
     # Juego minimo para probar Game sin depender de Tetris ni Snake
     def inicializar_estado(self):
         self.llamadas = ['inicializar_estado']
-        self.teclas = []
         self.acciones = []
         self.velocidad_gravedad = 0.1
-
-    def manejar_tecla(self, key):
-        self.teclas.append(key)
 
     def ejecutar_accion(self, verbo, objeto, accion):
         self.acciones.append((verbo, objeto))
@@ -37,7 +33,6 @@ class TestGame(unittest.TestCase):
     def test_clase_abstracta(self):
         self.assertRaises(NotImplementedError, Game, datos())
         juego = JuegoPrueba(datos())
-        self.assertRaises(NotImplementedError, Game.manejar_tecla, juego, 'UP')
         self.assertRaises(NotImplementedError, Game.ejecutar_accion, juego, 'SPAWN', None, {})
         self.assertRaises(NotImplementedError, Game.dibujar_elementos, juego)
 
@@ -80,9 +75,12 @@ class TestGame(unittest.TestCase):
         juego.ejecutar_evento('ON_FIN')
         self.assertTrue(juego.juego_terminado)
 
+        # Las flechas disparan ON_KEY_*; el resto de teclas se ignora
+        juego = JuegoPrueba(datos({'ON_KEY_UP': [{'accion': 'MOVE', 'objeto': 'UP', 'params': []}]}))
         juego.manejar_input_gui(EventoFalso('Up'))
+        juego.manejar_input_gui(EventoFalso('Down'))
         juego.manejar_input_gui(EventoFalso('a'))
-        self.assertEqual(juego.teclas, ['UP', 'A'])
+        self.assertEqual(juego.acciones, [('MOVE', 'UP')])
 
     def test_loop(self):
         eventos = {'ON_TICK': [{'accion': 'INCREASE_SCORE', 'objeto': '1', 'params': []}]}
