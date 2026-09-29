@@ -4,7 +4,7 @@
 #   - Tests <grupo>: un job por archivo de tests (ver la matriz abajo).
 #     Cada archivo tests/test_*.py nuevo debe agregarse a la matriz.
 #
-# Para correr lo mismo en local (desde TLP/):
+# Para correr lo mismo en local (desde la raiz del repo):
 #   python2 -m unittest discover -s tests -t . -v
 
 name: Tests
@@ -19,10 +19,6 @@ on:
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PYTHONDONTWRITEBYTECODE: "1"
-
-defaults:
-  run:
-    working-directory: TLP
 
 jobs:
   compilacion:

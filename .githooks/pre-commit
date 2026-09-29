@@ -1,0 +1,25 @@
+#!/bin/sh
+# pre-commit --- Corre los tests antes de cada commit; si fallan, no hay commit.
+# Se activa una sola vez por clon con:
+#   git config core.hooksPath .githooks
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# El proyecto es Python 2.7: se busca python2 y, si no, python.
+if command -v python2 >/dev/null 2>&1; then
+    PYTHON=python2
+elif command -v python >/dev/null 2>&1; then
+    PYTHON=python
+else
+    echo "pre-commit: no se encontro Python 2.7 (python2). Commit cancelado."
+    exit 1
+fi
+
+echo "pre-commit: corriendo tests..."
+if ! SALIDA=$("$PYTHON" -m unittest discover -s tests -t . 2>&1); then
+    echo "$SALIDA"
+    echo ""
+    echo "pre-commit: los tests fallan. Arreglalos antes de hacer commit."
+    exit 1
+fi
+echo "$SALIDA" | tail -n 3

@@ -14,7 +14,7 @@ import compiler
 from engine import crear_juego, JUEGOS, Game, Tetris, Snake
 from engine.utilidades import eleccion_ponderada
 
-CARPETA_TLP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CARPETA_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def compilar(ruta_brick):
@@ -47,7 +47,7 @@ class TestJuegosReales(unittest.TestCase):
     # varios ciclos de juego con teclas al azar.
 
     def test_games_brick(self):
-        archivos = sorted(glob.glob(os.path.join(CARPETA_TLP, 'games', '*.brick')))
+        archivos = sorted(glob.glob(os.path.join(CARPETA_RAIZ, 'games', '*.brick')))
         self.assertTrue(archivos)
         teclas = ['Up', 'Down', 'Left', 'Right']
         for ruta in archivos:
@@ -66,7 +66,7 @@ class TestRuntime(unittest.TestCase):
 
     def ejecutar(self, *argumentos):
         proceso = subprocess.Popen([sys.executable, 'runtime.py'] + list(argumentos),
-                                   cwd=CARPETA_TLP, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                   cwd=CARPETA_RAIZ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         salida = proceso.communicate()[0]
         return proceso.returncode, salida
 
@@ -79,7 +79,7 @@ class TestRuntime(unittest.TestCase):
         self.assertEqual(codigo, 1)
         self.assertIn('No se pudo encontrar el archivo', salida)
 
-        ruta = os.path.join(CARPETA_TLP, 'tests', '_tipo_desconocido.json')
+        ruta = os.path.join(CARPETA_RAIZ, 'tests', '_tipo_desconocido.json')
         with open(ruta, 'w') as f:
             json.dump({'tipo_juego': 'PONG', 'config': {}, 'shapes': {}, 'events': {}}, f)
         try:

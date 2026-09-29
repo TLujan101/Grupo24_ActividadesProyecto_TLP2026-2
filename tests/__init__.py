@@ -2,7 +2,7 @@
 # Los tests nunca usan el Tkinter real: se instala uno falso antes de
 # que cualquier test importe la carpeta engine/.
 #
-# Ejecutar desde la carpeta TLP:
+# Ejecutar desde la raiz del repo:
 #   python2 -m unittest discover -s tests -t . -v
 
 from tests import tk_falso

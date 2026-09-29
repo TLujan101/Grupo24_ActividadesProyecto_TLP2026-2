@@ -69,8 +69,8 @@ class TestTetrisClasico(unittest.TestCase):
             self.assertEqual(juego.puntuacion, 100, nombre)
             self.assertIn(juego.pieza_nombre, datos_juego['shapes'], nombre)
 
-    # Protege docs/ERRORES_CONOCIDOS.md, error #1: sortear un power up que
-    # tetris.brick no define no debe romper el spawn.
+    # Sortear un power up que el .brick no define (tetris.brick) no debe
+    # romper el spawn (antes lanzaba KeyError).
     def test_limpiar_linea_con_cualquier_sorteo(self):
         # Cada valor cae en un rango distinto del sorteo de power ups
         for sorteo in (0.10, 0.30, 0.50, 0.70, 0.90):

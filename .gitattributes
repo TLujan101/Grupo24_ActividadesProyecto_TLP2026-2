@@ -6,3 +6,4 @@
 *.bat text eol=crlf
 *.sh text eol=lf
 *.pdf binary
+.githooks/* text eol=lf
