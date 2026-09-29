@@ -20,3 +20,6 @@ TLP/games/*.json
 *~
 Thumbs.db
 Desktop.ini
+
+# Entorno de desarrollo local (no se comparte)
+.devcontainer/

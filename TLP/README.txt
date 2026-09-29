@@ -6,7 +6,8 @@ BrickScript es un lenguaje de programacion simple (un "DSL" o Lenguaje de Domini
 
 Este proyecto incluye el compilador que traduce el codigo BrickScript a un formato que la computadora entiende, y el motor de juego que lo ejecuta.
 
-El runtime fue implementado para Windows con Python 2.7
+El runtime usa Python 2.7 con Tkinter y funciona en Windows y Linux.
+Los pasos de instalacion estan en INSTALL.txt (en la raiz del repositorio).
 
 -------------------------------------------------------------
                       COMO JUGAR
@@ -14,19 +15,21 @@ El runtime fue implementado para Windows con Python 2.7
 
 Para compilar y ejecutar un juego, hemos creado un script que hace todo el trabajo por ti.
 
-1. Abre una terminal de comandos (cmd.exe) en la carpeta principal del proyecto (C:\tpl).
+1. Abre una terminal dentro de la carpeta TLP del proyecto.
 
-2. Usa el comando "jugar.bat" seguido del nombre del juego que quieres ejecutar (sin la extension .brick).
+2. Ejecuta el script de tu sistema seguido del nombre del juego (el nombre
+   del archivo en games/ sin la extension .brick) o de su numero en el menu:
 
-   EJEMPLO PARA JUGAR SNAKE:
-   jugar.bat snake
+   WINDOWS (cmd.exe):          LINUX:
+   jugar.bat snake             ./jugar.sh snake
+   jugar.bat tetris_reborn     ./jugar.sh tetris_reborn
 
-   EJEMPLO PARA JUGAR TETRIS:
-   jugar.bat tetris
+   Si no indicas ningun juego, el script muestra un menu con todos los
+   juegos que encuentra en games/.
 
 El script primero compilara el archivo .brick correspondiente. Si la compilacion es exitosa, el juego se iniciara automaticamente.
 
-Para salir del juego, presiona la tecla 'q'.
+Para salir del juego, cierra la ventana.
 
 
 -------------------------------------------------------------
@@ -49,6 +52,9 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
 * DEFINE SHAPE [NOMBRE_PIEZA]: ... END
     Define una forma geometrica con uno o mas estados (para rotaciones).
     Ej: DEFINE SHAPE T_PIEZA: STATE 1: [0,1,0][1,1,1][0,0,0] END
+    Opcionalmente, antes de los dos puntos, se puede indicar el color
+    (por defecto CYAN) y la probabilidad de aparecer (por defecto 10):
+    Ej: DEFINE SHAPE T_PIEZA COLOR PURPLE CHANCE 10: STATE 1: [0,1,0][1,1,1][0,0,0] END
 
 --- SINTAXIS PARA TETRIS ---
 

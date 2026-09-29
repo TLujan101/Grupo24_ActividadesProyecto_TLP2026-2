@@ -27,15 +27,22 @@ Para que los scripts funcionen correctamente, los archivos deben estar organizad
     C:\TPL\
     |
     +--- compiler.py         (El compilador que traduce .brick a .json)
-    +--- runtime.py          (El motor que ejecuta los juegos .json)
+    +--- runtime.py          (Carga el .json y arranca el juego correspondiente)
     +--- jugar.bat           (El script para compilar y jugar facilmente)
+    +--- jugar.sh            (Lo mismo que jugar.bat, para Linux)
     +--- README.txt          (Informacion general del lenguaje)
-    +--- REQUISITOS...txt    (Este archivo)
     |
-    \--- games\
-         +--- tetris.brick    (Codigo fuente del juego Tetris)
-         +--- snake.brick     (Codigo fuente del juego Snake)
-         \--- (Aqui se generaran los archivos .json)
+    +--- games\              (Codigo fuente BrickScript de cada juego)
+    |    +--- tetris.brick    (Tetris clasico)
+    |    +--- snake.brick     (Snake clasico)
+    |    +--- ...             (Variantes: tetris_reborn, snake_remake, ...)
+    |    \--- (Aqui se generan los archivos .json)
+    |
+    +--- engine\             (Logica en Python de cada tipo de juego)
+    +--- grammars\           (Gramaticas BNF del lenguaje)
+    +--- docs\               (Documentacion, cambios y errores conocidos)
+    +--- songs\              (Musica)
+    \--- tests\              (Tests automaticos)
 
 
 -------------------------------------------------------------
