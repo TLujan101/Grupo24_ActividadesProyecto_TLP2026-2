@@ -18,6 +18,14 @@
 #             modo que nunca queda basura acumulada.
 #
 # pw-play queda fuera a proposito: solo reproduce archivos, no acepta stdin.
+#
+# CONCURRENCIA (Windows, donde MCI obliga a nombrar canales):
+#   Los efectos comparten un pool de 8 alias MCI. Como el archivo y el alias
+#   se reservan juntos en _efecto_nuevo(), dos efectos simultaneos nunca caen
+#   en el mismo alias y el 'close' de uno no le corta el sonido al otro.
+#   Para la musica hay un contador de generacion: cada vez que se pide una
+#   cancion sube, y _sigo_vivo() hace que el hilo de la cancion anterior se
+#   retire aunque 'reproduciendo_musica' vuelva a estar en True.
 
 import os
 import sys
@@ -243,17 +251,16 @@ class GestorAudioNativo(object):
             except Exception:
                 break
 
-        # El hilo solo cierra 'bgm' si sigue siendo el dueño: si otra cancion
-        # ya tomó el alias, cerrarlo le cortaría el sonido a esta.
-        if not self._sigo_vivo(generacion):
-            with self._lock:
-                es_mio = self._generacion == generacion
-            if es_mio:
-                try:
-                    _mci('stop bgm', None, 0, 0)
-                    _mci('close bgm', None, 0, 0)
-                except Exception:
-                    pass
+        # Cierra SIEMPRE 'bgm'. Aunque otra cancion ya haya tomado el alias,
+        # este hilo es el unico que puede seguir con el archivo abierto, y
+        # mientras no cierre, el scratch no se puede reescribir en Windows
+        # (MCI lo bloquea en exclusiva). reproduce_musica_fondo() espera con
+        # join() a que este hilo termine antes de escribir de nuevo.
+        try:
+            _mci('stop bgm', None, 0, 0)
+            _mci('close bgm', None, 0, 0)
+        except Exception:
+            pass
 
     def reproducir_musica_fondo(self, pcm, firma):
         """Reproduce la musica en bucle. `firma` identifica la cancion."""
@@ -273,14 +280,26 @@ class GestorAudioNativo(object):
             self._firma_actual = firma
             self.reproduciendo_musica = True
 
+        # Y ahora se espera a que el hilo anterior se vaya. En Windows MCI
+        # abre el scratch en exclusiva, asi que escribir encima mientras el
+        # hilo viejo sigue con 'bgm' abierto da Permission denied: la cancion
+        # nueva se quedaba sin arrancar y el juego mudo sin explicar nada.
+        # Como la generacion ya cambio, ese hilo sale solo en cuanto vuelve a
+        # mirar la bandera.
+        self._esperar_hilo_musica()
+
         if IS_LINUX:
             objetivo, args = self._loop_linux, (pcm, generacion)
         elif IS_WIN and _mci and self._ruta_musica:
             try:
                 self._escribir_wav(self._ruta_musica, pcm)
-            except Exception:
+            except (IOError, OSError), e:
                 # Sin scratch no hay musica, pero no es motivo para tumbar el
-                # juego: se sigue jugando en silencio.
+                # juego: se sigue jugando en silencio. Si no se dice nada, el
+                # silencio parece un fallo del .brick cuando en realidad es el
+                # archivo temporal.
+                sys.stderr.write('[audio] no se pudo escribir el temporal de audio (%s); '
+                                 'la musica queda en silencio\n' % e)
                 with self._lock:
                     self.reproduciendo_musica = False
                 return
@@ -293,6 +312,17 @@ class GestorAudioNativo(object):
         self.hilo_musica = threading.Thread(target=objetivo, args=args)
         self.hilo_musica.daemon = True
         self.hilo_musica.start()
+
+    def _esperar_hilo_musica(self):
+        """Espera a que el hilo de musica anterior termine (o se rindan)."""
+        hilo = self.hilo_musica
+        if hilo is None or hilo is threading.current_thread():
+            return
+        hilo.join(2.0)
+        if hilo.is_alive():
+            sys.stderr.write('[audio] el hilo de la cancion anterior no termino a tiempo\n')
+            return
+        self.hilo_musica = None
 
     def detener_musica(self):
         """Corta la musica de inmediato."""
