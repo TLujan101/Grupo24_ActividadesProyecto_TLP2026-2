@@ -125,6 +125,9 @@ class Tetris(Game):
         nueva_rotacion = (self.pieza_rotacion + 1) % len(self.pieza_actual)
         if not self.tetris_verificar_colision(self.pieza_x, self.pieza_y, nueva_rotacion):
             self.pieza_rotacion = nueva_rotacion
+            # Solo si la rotacion se pudo hacer: un .brick con
+            # ON ROTATE: PLAY_EFFECT ... suena al rotar de verdad.
+            self.ejecutar_evento('ON_ROTATE')
 
     def tetris_fijar_pieza(self):
         matriz_pieza = self.pieza_actual[self.pieza_rotacion]
@@ -142,6 +145,7 @@ class Tetris(Game):
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
                         self.grid[ny][nx] = 0
             self.puntuacion += 150
+            self.ejecutar_evento('ON_EXPLOSION')
 
         elif es_superbomba:
             base_x, base_y = int(self.pieza_x), int(self.pieza_y)
@@ -153,6 +157,7 @@ class Tetris(Game):
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
                         self.grid[ny][nx] = 0
             self.puntuacion += 350
+            self.ejecutar_evento('ON_EXPLOSION')
 
         elif es_limpia_columnas:
             columnas_a_borrar = set()
@@ -198,6 +203,10 @@ class Tetris(Game):
                             self.grid[py][px] = 1
 
         self.pieza_actual = None
+        # Toda pieza que llega al suelo dispara este evento, sin importar si
+        # era normal o un power-up. Los poderes con radio (bomba, superbomba)
+        # disparan ademas ON_EXPLOSION.
+        self.ejecutar_evento('ON_PIECE_LAND')
         self.tetris_limpiar_lineas()
         self.ejecutar_evento('ON_START')
 

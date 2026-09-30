@@ -153,9 +153,83 @@ DEFINE SHAPE CLEAR_THREE_PIECE COLOR RAINBOW CHANCE 0:
         [1]
 END
 
+
+# --- Musica programada en el lenguaje ---
+#
+# Cada nota es un nombre (A-G + octava) y su duracion en milisegundos.
+# El compilador traduce el nombre a Hercios y el runtime sintetiza la onda
+# y la guarda en RAM. No hay archivos de audio: todo sale del codigo.
+
+DEFINE SONG TETRIS_TEMA_A:
+    # Frase 1
+    NOTE E5 440
+    NOTE B4 220
+    NOTE C5 220
+    NOTE D5 440
+    NOTE C5 220
+    NOTE B4 220
+    NOTE A4 440
+    NOTE A4 220
+    NOTE C5 220
+    NOTE E5 440
+    NOTE D5 220
+    NOTE C5 220
+    NOTE B4 660
+    NOTE C5 220
+    NOTE D5 440
+    NOTE E5 440
+    NOTE C5 440
+    NOTE A4 440
+    NOTE A4 880
+
+    # Frase 2
+    NOTE D5 660
+    NOTE F5 220
+    NOTE A5 440
+    NOTE G5 220
+    NOTE F5 220
+    NOTE E5 660
+    NOTE C5 220
+    NOTE E5 440
+    NOTE D5 220
+    NOTE C5 220
+    NOTE B4 440
+    NOTE B4 220
+    NOTE C5 220
+    NOTE D5 440
+    NOTE E5 440
+    NOTE C5 440
+    NOTE A4 440
+    NOTE A4 880
+END
+
+# Efectos cortos: suenan una vez y no cortan la musica de fondo.
+DEFINE EFFECT BEEP_LINEA:
+    NOTE A5 60
+    NOTE E6 120
+END
+
+DEFINE EFFECT BEEP_ROTAR:
+    NOTE C6 40
+END
+
+DEFINE EFFECT BEEP_BOMBA:
+    NOTE G3 100
+    NOTE C4 150
+END
+
+DEFINE EFFECT FIN_JUEGO:
+    NOTE E4 150
+    NOTE C4 150
+    NOTE A3 300
+END
+
 # --- Logica y Reglas ---
 ON START:
   SPAWN RANDOM_SHAPE
+  # Idempotente: si el tema ya suena no lo reinicia, aunque ON START se
+  # dispare otra vez al fijar cada pieza.
+  PLAY_MUSIC TETRIS_TEMA_A
 END
 
 
@@ -166,6 +240,7 @@ END
 
 ON LINE_CLEAR:
   INCREASE_SCORE 100
+  PLAY_EFFECT BEEP_LINEA
 END
 # --- Controles ---
 ON KEY_LEFT:
@@ -179,4 +254,20 @@ ON KEY_DOWN:
 END
 ON KEY_UP:
   ROTATE CURRENT_PIECE
+END
+
+# --- Audio por evento del motor ---
+# Estos eventos los emite engine/tetris.py y engine/game.py.
+ON ROTATE:
+  PLAY_EFFECT BEEP_ROTAR
+END
+
+ON EXPLOSION:
+  PLAY_EFFECT BEEP_BOMBA
+END
+
+# Al terminar se calla la musica y entra el jingle de fin de partida.
+ON GAME_OVER:
+  STOP_MUSIC
+  PLAY_EFFECT FIN_JUEGO
 END
