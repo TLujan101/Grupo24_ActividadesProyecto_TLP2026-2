@@ -90,6 +90,7 @@ class GestorAudioNativo(object):
         self._pcm_actual = None       # ultima cancion sintetizada, para el un-mute
         self._firma_actual = None
         self._sfx_id = 0
+        self._generacion = 0          # ver _sigo_vivo(): invalida el hilo viejo
         self._lock = threading.Lock()
         self.reproductor = _detectar_reproductor_linux() if IS_LINUX else None
 
@@ -171,32 +172,54 @@ class GestorAudioNativo(object):
         except Exception:
             pass
 
-    def _ruta_efecto(self):
-        # Un archivo por efecto, para no pisar uno que MCI todavia tiene
-        # abierto. Se borra al terminar de sonar.
+    def _efecto_nuevo(self):
+        """Reserva un slot de efecto. Devuelve (archivo, alias) del MISMO numero.
+
+        Antes el archivo se nombraba con un contador y el alias MCI se
+        calculaba RE-LEYENDO ese contador despues, en otra seccion critica. Con
+        efectos simultaneos los dos se desincronizaban: sfx_2.wav y sfx_10.wav
+        acababan con el alias sfx_2, y el 'close sfx_2' del segundo cortaba el
+        sonido del primero a media vuelta. Ahora salen del mismo numero, asi
+        que un archivo y su alias siempre van juntos.
+        """
         with self._lock:
             self._sfx_id += 1
-            nombre = 'sfx_%d.wav' % self._sfx_id
-        return os.path.join(self._dir_temp, nombre)
+            numero = self._sfx_id
+        return (os.path.join(self._dir_temp, 'sfx_%d.wav' % numero),
+                'sfx_%d' % (numero % 8))
+
+    def _sigo_vivo(self, generacion):
+        """True si ESTE hilo sigue siendo el dueno de la musica.
+
+        'reproduciendo_musica' no alcanza: en un cambio de cancion o en un
+        un-mute vuelve a True ANTES de que el hilo anterior termine, y entonces
+        el viejo se cree vivo otra vez y los dos hilos mueven el mismo alias MCI
+        'bgm'. La generacion sube con cada cancion pedida, asi que el hilo viejo
+        se retira en cuanto hay una nueva.
+        """
+        with self._lock:
+            return (self.reproduciendo_musica
+                    and not self.silenciado
+                    and self._generacion == generacion)
 
     # MUSICA DE FONDO
     # ----------------
 
-    def _loop_linux(self, pcm):
+    def _loop_linux(self, pcm, generacion):
         # Relanza el reproductor cada vez que termina la cancion. El pipe
         # aplica contrapresion, asi que escribir el PCM ya marca el ritmo.
-        while self.reproduciendo_musica and not self.silenciado:
+        while self._sigo_vivo(generacion):
             proc = self._lanzar_linux(pcm, es_musica=True)
             if proc is None:
                 break
             while proc.poll() is None:
-                if not self.reproduciendo_musica or self.silenciado:
+                if not self._sigo_vivo(generacion):
                     self._matar(proc)
                     break
                 time.sleep(0.08)
             self._olvidar(proc)
 
-    def _loop_mci(self, pcm):
+    def _loop_mci(self, pcm, generacion):
         # MCI abre por ruta, asi que hay que pasarle bytes ANSI y no unicode.
         ruta = self._ruta_musica
         if not isinstance(ruta, str):
@@ -209,10 +232,10 @@ class GestorAudioNativo(object):
             return
 
         buf = ctypes.create_string_buffer(64)
-        while self.reproduciendo_musica and not self.silenciado:
+        while self._sigo_vivo(generacion):
             try:
                 _mci('play bgm from 0', None, 0, 0)
-                while self.reproduciendo_musica and not self.silenciado:
+                while self._sigo_vivo(generacion):
                     time.sleep(0.08)
                     _mci('status bgm mode', buf, 64, 0)
                     if buf.value != 'playing':
@@ -220,11 +243,17 @@ class GestorAudioNativo(object):
             except Exception:
                 break
 
-        try:
-            _mci('stop bgm', None, 0, 0)
-            _mci('close bgm', None, 0, 0)
-        except Exception:
-            pass
+        # El hilo solo cierra 'bgm' si sigue siendo el dueño: si otra cancion
+        # ya tomó el alias, cerrarlo le cortaría el sonido a esta.
+        if not self._sigo_vivo(generacion):
+            with self._lock:
+                es_mio = self._generacion == generacion
+            if es_mio:
+                try:
+                    _mci('stop bgm', None, 0, 0)
+                    _mci('close bgm', None, 0, 0)
+                except Exception:
+                    pass
 
     def reproducir_musica_fondo(self, pcm, firma):
         """Reproduce la musica en bucle. `firma` identifica la cancion."""
@@ -232,22 +261,33 @@ class GestorAudioNativo(object):
         if self.silenciado or not pcm or not self.disponible():
             return
 
-        self.musica_actual = firma
-        self._pcm_actual = pcm
-        self._firma_actual = firma
-        self.reproduciendo_musica = True
+        # La generacion sube ANTES de tocar ninguna bandera: es lo que retira
+        # al hilo de la cancion anterior. Si se hiciera despues, ese hilo
+        # veria 'reproduciendo_musica' en True y creeria que sigue siendo el
+        # dueno del alias 'bgm'.
+        with self._lock:
+            self._generacion += 1
+            generacion = self._generacion
+            self.musica_actual = firma
+            self._pcm_actual = pcm
+            self._firma_actual = firma
+            self.reproduciendo_musica = True
 
         if IS_LINUX:
-            objetivo, args = self._loop_linux, (pcm,)
+            objetivo, args = self._loop_linux, (pcm, generacion)
         elif IS_WIN and _mci and self._ruta_musica:
             try:
                 self._escribir_wav(self._ruta_musica, pcm)
             except Exception:
-                self.reproduciendo_musica = False
+                # Sin scratch no hay musica, pero no es motivo para tumbar el
+                # juego: se sigue jugando en silencio.
+                with self._lock:
+                    self.reproduciendo_musica = False
                 return
-            objetivo, args = self._loop_mci, (pcm,)
+            objetivo, args = self._loop_mci, (pcm, generacion)
         else:
-            self.reproduciendo_musica = False
+            with self._lock:
+                self.reproduciendo_musica = False
             return
 
         self.hilo_musica = threading.Thread(target=objetivo, args=args)
@@ -256,14 +296,15 @@ class GestorAudioNativo(object):
 
     def detener_musica(self):
         """Corta la musica de inmediato."""
-        self.reproduciendo_musica = False
+        with self._lock:
+            self.reproduciendo_musica = False
         if IS_WIN and _mci:
             try:
                 _mci('stop bgm', None, 0, 0)
                 _mci('close bgm', None, 0, 0)
             except Exception:
                 pass
-        elif IS_LINUX:
+        else:
             # Sin esto el proceso hijo queda huerfano sonando hasta que
             # termina su cancion, aunque el juego ya haya cerrado.
             with self._lock:
@@ -293,13 +334,13 @@ class GestorAudioNativo(object):
             return
 
         if IS_WIN and _mci and self._dir_temp:
-            ruta = self._ruta_efecto()
+            # _efecto_nuevo() devuelve archivo y alias del MISMO numero, para
+            # que dos efectos simultaneos no acaben compartiendo alias MCI.
+            ruta, alias = self._efecto_nuevo()
             try:
                 self._escribir_wav(ruta, pcm)
             except Exception:
                 return
-            with self._lock:
-                alias = 'sfx_%d' % (self._sfx_id % 8)
 
             def _sfz_mci():
                 buf = ctypes.create_string_buffer(64)
