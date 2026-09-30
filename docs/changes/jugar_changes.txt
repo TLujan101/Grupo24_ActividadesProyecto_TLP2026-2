@@ -1,0 +1,135 @@
+Cambios en jugar.bat y creacion de jugar.sh (Actividad 3, primera entrega)
+
+
+1. jugar.bat: menu automatico (modificado)
+
+Antes exigia el nombre como argumento y tenia rutas fijas:
+
+>   C:\Python27\python.exe .\compiler.py .\games\%1.brick
+>   C:\Python27\python.exe .\runtime.py .\games\%1.json
+
+Sin argumento solo mostraba el uso y salia.
+
+Ahora descubre los juegos desde games\*.brick (nada hardcodeado):
+
+dir /b "games\*.brick" >nul 2>&1
+set Count=0
+for %%f in (games\*.brick) do (
+    set /A Count+=1
+    set "Game_!Count!=%%~nf"
+    set "File_!Count!=%%f"
+)
+
+
+2. jugar.bat: pedir y resolver (nuevo)
+
+Acepta numero o nombre (insensible a mayusculas).
+Si el juego es invalido vuelve a preguntar en vez de abortar.
+
+Menu interactivo cuando no hay argumento o el juego es invalido:
+
+:Pedir
+echo  Elija un juego:
+for /L %%i in (1,1,!Count!) do (
+    echo  %%i^) !Game_%%i!
+)
+set /p Juego="Elige un numero o nombre: "
+
+Resolucion numero-o-nombre a la ruta real del .brick:
+
+:Resolver
+set "Brick="
+echo %Juego%| findstr /R "^[0-9][0-9]*$" >nul
+if not errorlevel 1 (
+    if %Juego% GEQ 1 if %Juego% LEQ !Count! (
+        call set "Brick=%%File_%Juego%%%"
+        goto :eof
+    )
+)
+for /L %%i in (1,1,!Count!) do (
+    if /I "!Game_%%i!"=="%Juego%" (
+        set "Brick=!File_%%i!"
+        goto :eof
+    )
+)
+
+El .json se deriva del .brick (ya no se arma a mano):
+
+set "Json=!Brick:.brick=.json!"
+
+
+3. jugar.bat: flujo igual, rutas entre comillas (modificado)
+
+El flujo compilar-verificar-ejecutar se mantiene igual
+(compiler.py, chequeo de errorlevel, "Compilacion exitosa",
+runtime.py), solo que ahora opera sobre "%Brick%" y "%Json%"
+entre comillas para rutas con espacios:
+
+C:\Python27\python.exe .\compiler.py "%Brick%"
+C:\Python27\python.exe .\runtime.py "%Json%"
+
+Esto era necesario para la Actividad 3:
+al separar tetris.brick (original intacto) de tetris_reborn.brick,
+el menu los lista solos sin tocar el .bat.
+snake sigue funcionando igual.
+
+
+4. jugar.sh: archivo nuevo (no existia en el primer commit)
+
+Equivalente Linux de jugar.bat.
+
+Requiere python2 con Tkinter (ej: paru -S --needed tk python2).
+El interprete se puede cambiar con la variable de entorno PYTHON2:
+
+PYTHON2="${PYTHON2:-python2}"
+
+Descubre los juegos con glob (nada hardcodeado) y aborta
+si no hay .brick, igual que el .bat:
+
+shopt -s nullglob
+Archivos=(games/*.brick)
+
+Pedir lista "1) nombre" y lee numero o nombre:
+
+Pedir() {
+    echo " Elija un juego:"
+    local i=1 f
+    for f in "${Archivos[@]}"; do
+        echo " $i) $(basename "$f" .brick)"
+        i=$((i + 1))
+    done
+    read -p "Elige un numero o nombre: " Juego
+}
+
+Resolver acepta indice 1-N o nombre insensible a mayusculas
+(via tr a minusculas) e imprime la ruta o retorna 1:
+
+Resolver() {
+    local n="$1" f base i
+    if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le ${#Archivos[@]} ]; then
+        echo "${Archivos[$((n - 1))]}"
+        return 0
+    fi
+    n=$(echo "$n" | tr '[:upper:]' '[:lower:]')
+    for f in "${Archivos[@]}"; do
+        base=$(basename "$f" .brick)
+        if [ "$(echo "$base" | tr '[:upper:]' '[:lower:]')" = "$n" ]; then
+            echo "$f"
+            return 0
+        fi
+    done
+    return 1
+}
+
+Mismo flujo en dos fases que el .bat: compila, chequea $?,
+imprime "Compilacion exitosa. Iniciando el juego..." y ejecuta:
+
+"$PYTHON2" ./compiler.py "$Brick"
+"$PYTHON2" ./runtime.py "$Json"
+
+
+5. Nota sobre los .json
+
+Los *.json generados no se versionan
+(.gitignore los excluye: TLP/games/*.json)
+porque son salida del compilador, no codigo fuente.
