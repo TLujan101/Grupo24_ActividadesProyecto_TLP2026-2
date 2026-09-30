@@ -69,12 +69,53 @@ class Button(WidgetFalso): pass
 class Toplevel(WidgetFalso): pass
 
 
+class AudioFalso(object):
+    # Sustituto de audio.GestorAudioNativo. No abre canales de sonido: solo
+    # deja registro de lo que el juego le pidio, para poder assertarlo.
+    def __init__(self):
+        self.silenciado = False
+        self.reproduciendo_musica = False
+        self.musica_actual = None
+        self.llamadas = []
+
+    def disponible(self):
+        return True
+
+    def reproducir_musica_fondo(self, pcm, firma):
+        self.llamadas.append(('musica', firma))
+        self.musica_actual = firma
+        self.reproduciendo_musica = True
+
+    def reproducir_efecto(self, pcm):
+        self.llamadas.append(('efecto',))
+
+    def detener_musica(self):
+        self.llamadas.append(('stop',))
+        self.reproduciendo_musica = False
+
+    def alternar_silencio(self):
+        self.silenciado = not self.silenciado
+        if self.silenciado:
+            self.detener_musica()
+        return self.silenciado
+
+    def detener_todo(self):
+        self.llamadas.append(('todo',))
+        self.reproduciendo_musica = False
+
+
 def instalar():
     # Registra este modulo como 'Tkinter' antes de importar los juegos
     modulo = types.ModuleType('Tkinter')
     for nombre in ('LEFT', 'RIGHT', 'Y', 'Tk', 'Canvas', 'Frame', 'Label', 'Button', 'Toplevel'):
         setattr(modulo, nombre, globals()[nombre])
     sys.modules['Tkinter'] = modulo
+
+    # El mismo truco para el audio: los tests no van a hacer sonar nada, pero
+    # engine/game.py sigue importando el simbolo y ejecutando el mismo codigo.
+    modulo_audio = types.ModuleType('audio')
+    modulo_audio.GestorAudioNativo = AudioFalso
+    sys.modules['audio'] = modulo_audio
 
 
 class EventoFalso(object):

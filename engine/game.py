@@ -16,6 +16,9 @@ import sys
 # Tkinter es la libreria GUI estandar de Python, compatible con 2.7
 import Tkinter as tk
 
+import tracker
+from audio import GestorAudioNativo
+
 COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas
 
 
@@ -57,12 +60,25 @@ class Game(object):
         self.label_controles = tk.Label(self.marco_score, text="CONTROLES\nFlechas: Mover/Rotar", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 10))
         self.label_controles.pack(pady=20, padx=10)
 
+        # Boton de silencio. El color dice el estado: verde suena, gris no.
+        # Solo se muestra si el .brick declara audio: si no hay ninguna
+        # cancion ni efecto, el motor no puede hacer sonar nada y el boton
+        # solo ocuparia espacio.
+        self.audio = self.crear_audio()
+        if self.tiene_audio():
+            self.btn_sonido = tk.Button(self.marco_score, text="Audio: ON",
+                                        command=self.toggle_audio,
+                                        font=('Consolas', 10, 'bold'),
+                                        bg='#2a2a3e', fg='#03a80b')
+            self.btn_sonido.pack(pady=10, padx=10)
+
         # Configurar eventos de teclado. Usamos <Key> para capturar cualquier tecla
         self.root.bind('<Key>', self.manejar_input_gui)
 
         # Estado propio de cada juego (definido por la clase hija)
         self.inicializar_estado()
 
+        self._game_over_emitido = False
         self.timer_gravedad = 0
         self.ejecutar_evento('ON_START')
         self.timer_id = None # Para controlar el loop de Tkinter
@@ -88,6 +104,59 @@ class Game(object):
         return COLOR_GRID_FIJA
 
 
+    # AUDIO
+    # -----
+    #
+    # El audio es opcional: un .brick sin SONG ni EFFECT arranca en silencio.
+    # Las acciones PLAY_MUSIC / PLAY_EFFECT / STOP_MUSIC llegan hasta aqui
+    # desde ejecutar_evento().
+
+    def tiene_audio(self):
+        # El audio del .brick son los bloques DEFINE SONG y DEFINE EFFECT.
+        return bool(self.datos_juego.get('songs') or self.datos_juego.get('effects'))
+
+    def crear_audio(self):
+        # Punto unico de creacion del gestor. Los tests sobreescriben este
+        # metodo para no abrir canales de sonido de verdad.
+        return GestorAudioNativo()
+
+    def toggle_audio(self):
+        silenciado = self.audio.alternar_silencio()
+        if silenciado:
+            self.btn_sonido.config(text="Audio: OFF", fg="#888888")
+        else:
+            self.btn_sonido.config(text="Audio: ON", fg="#03a80b")
+
+    def musica_brick(self, nombre):
+        # Sintetiza la cancion (queda en RAM) y la pone en bucle.
+        canciones = self.datos_juego.get('songs', {})
+        if not nombre or nombre not in canciones:
+            return
+        notas = canciones[nombre].get('notas', [])
+        firma = tracker.firma_partitura(notas)
+
+        # Idempotente: ON_START se re-dispara en cada pieza fijada, y sin
+        # este chequeo la musica se reiniciaria cada vez.
+        if firma == self.audio.musica_actual and self.audio.reproduciendo_musica:
+            return
+
+        pcm = tracker.cancion_pcm(nombre, notas)
+        if not pcm:
+            return
+        self.audio.reproducir_musica_fondo(pcm, firma)
+
+    def efecto_brick(self, nombre):
+        # Un efecto se sintetiza igual que una cancion pero suena una vez.
+        efectos = self.datos_juego.get('effects', {})
+        if not nombre or nombre not in efectos:
+            return
+        notas = efectos[nombre].get('notas', [])
+        pcm = tracker.cancion_pcm(nombre, notas)
+        if not pcm:
+            return
+        self.audio.reproducir_efecto(pcm)
+
+
     # CICLO DE JUEGO
     # --------------
 
@@ -98,6 +167,11 @@ class Game(object):
 
     def game_loop(self):
         if self.juego_terminado:
+            # GAME_OVER se emite una sola vez: el .brick puede usarlo para
+            # cortar la musica o tocar un jingle de fin de partida.
+            if not self._game_over_emitido:
+                self._game_over_emitido = True
+                self.ejecutar_evento('ON_GAME_OVER')
             self.mostrar_game_over()
             return
 
@@ -117,6 +191,13 @@ class Game(object):
         # Detiene el loop de juego de forma segura
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
+        # Antes de destruir la ventana hay que soltar el audio: en Linux
+        # queda un proceso hijo reproduciendo y en Windows un scratch en
+        # disco. Sin esto, cerrar el juego deja sonido sonando.
+        try:
+            self.audio.detener_todo()
+        except Exception:
+            pass
         self.root.destroy()
         sys.exit(0)
 
@@ -149,6 +230,11 @@ class Game(object):
                     except (ValueError, TypeError):
                         pass
                 if verbo == 'GAME_OVER': self.juego_terminado = True
+
+                # Audio declarado en el .brick
+                if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
+                if verbo == 'PLAY_EFFECT': self.efecto_brick(objeto)
+                if verbo == 'STOP_MUSIC': self.audio.detener_musica()
 
                 # Acciones propias de cada juego
                 self.ejecutar_accion(verbo, objeto, accion)
@@ -220,6 +306,9 @@ class Game(object):
             bd=0,
             padx=20,
             pady=5,
-            command=lambda: (self.root.destroy(), sys.exit(0))
+            # Reutiliza cerrar_ventana: esta via de salida tambien tiene que
+            # soltar el audio, y antes se lo saltaba (root.destroy + sys.exit
+            # a pelo), dejando los procesos de sonido sonando.
+            command=self.cerrar_ventana
         )
         btn_salir.pack(pady=20)
