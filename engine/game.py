@@ -306,6 +306,9 @@ class Game(object):
             bd=0,
             padx=20,
             pady=5,
-            command=lambda: (self.root.destroy(), sys.exit(0))
+            # Reutiliza cerrar_ventana: esta via de salida tambien tiene que
+            # soltar el audio, y antes se lo saltaba (root.destroy + sys.exit
+            # a pelo), dejando los procesos de sonido sonando.
+            command=self.cerrar_ventana
         )
         btn_salir.pack(pady=20)

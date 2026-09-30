@@ -42,21 +42,38 @@ else:
     _mci = None
 
 # Formato que describe el PCM de tracker.py: mono 16 bits little-endian.
-FORMATO_PCM = {'paplay': ['--raw=s16le', '--rate=%d' % tracker.FPS, '--channels=1'],
+# OJO con paplay: --raw es una bandera SIN valor, el formato va aparte en
+# --format=. Escribir '--raw=s16le' hace que pacat >= 15 salga al instante con
+# "option '--raw' doesn't allow an argument", el pipe se rompe y el juego
+# suena mudo sin avisar.
+FORMATO_PCM = {'paplay': ['--raw', '--format=s16le', '--rate=%d' % tracker.FPS, '--channels=1'],
                'aplay':  ['-f', 'S16_LE', '-r', str(tracker.FPS), '-c', '1', '-t', 'raw']}
 
 
 def _detectar_reproductor_linux():
-    # Devuelve (comando, flags) del primer reproductor disponible que sepa
-    # leer PCM crudo de stdin. Si no hay ninguno, el juego sigue sin audio.
+    # Devuelve (comando, flags) del primer reproductor que este INSTALADO y de
+    # verdad ACEPTE estos flags. Solo con 'which' no alcanza: un reproductor
+    # puede estar presente y rechazar el formato, y entonces el juego suena
+    # mudo sin explicar nada (pasaba con 'paplay --raw=s16le').
+    #
+    # El sondeo le manda entrada VACIA: no emite audio (nada que clickear) pero
+    # obliga al proceso a parsear los flags y conectar con el destino. Codigo 0
+    # y stderr vacio = sirve. Asi, si paplay falla, se prueba aplay en vez de
+    # rendirse en silencio.
     for cmd in ('paplay', 'aplay'):
+        flags = FORMATO_PCM[cmd]
         try:
-            p = subprocess.Popen(['which', cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            p.communicate()
+            p = subprocess.Popen([cmd] + flags, stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            salida = p.communicate('')[1].strip()
             if p.returncode == 0:
-                return (cmd, FORMATO_PCM[cmd])
+                return (cmd, flags)
+            sys.stderr.write('[audio] %s instalado pero no sirve (%s), se prueba el siguiente\n'
+                             % (cmd, salida or 'codigo %d' % p.returncode))
         except Exception:
+            # No esta instalado (OSError): se pasa al siguiente sin quejarse.
             pass
+    sys.stderr.write('[audio] no hay reproductor de audio crudo en este sistema; el juego ira sin sonido\n')
     return (None, [])
 
 
@@ -69,6 +86,9 @@ class GestorAudioNativo(object):
         self.musica_actual = None      # firma de la cancion que suena
         self.hilo_musica = None
         self._proc_musica = None       # proceso hijo en Linux, para matarlo
+        self._procs_vivos = set()      # TODOS los hijos vivos (musica y efectos)
+        self._pcm_actual = None       # ultima cancion sintetizada, para el un-mute
+        self._firma_actual = None
         self._sfx_id = 0
         self._lock = threading.Lock()
         self.reproductor = _detectar_reproductor_linux() if IS_LINUX else None
@@ -100,21 +120,56 @@ class GestorAudioNativo(object):
         with open(ruta, 'wb') as f:
             f.write(tracker.wav_completo(pcm))
 
-    def _lanzar_linux(self, pcm):
-        """Inyecta el PCM por stdin. Devuelve el proceso, o None."""
+    def _abrir(self):
+        """Arranca el reproductor. NO inyecta nada, asi que no se bloquea."""
         cmd, flags = self.reproductor
-        if not cmd:
-            return None
-        proc = subprocess.Popen([cmd] + flags, stdin=subprocess.PIPE,
+        return subprocess.Popen([cmd] + flags, stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        # Se escribe desde este hilo: el pipe aplica contrapresion, asi que
-        # el reproductor marca el ritmo real y la cancion no adelanta.
+
+    def _inyectar(self, proc, pcm):
+        """Vuelca el PCM en stdin. Aqui si se bloquea, a proposito: el pipe
+        aplica contrapresion, asi que el reproductor marca el ritmo real y la
+        cancion no adelanta. Bloquear dura lo que dura la cancion."""
         try:
             proc.stdin.write(pcm)
             proc.stdin.close()
         except Exception:
             pass
+
+    def _lanzar_linux(self, pcm, es_musica):
+        """Abre el reproductor, REGISTRA el hijo y despues inyecta el PCM.
+
+        El orden importa: registrar despues de inyectar dejaba al proceso
+        invisible durante toda la cancion (inyectar bloquea), y entonces ni
+        el boton de silencio ni el cierre tenian a que matar.
+        """
+        if not self.reproductor[0]:
+            return None
+        try:
+            proc = self._abrir()
+        except Exception:
+            return None
+        with self._lock:
+            self._procs_vivos.add(proc)
+            if es_musica:
+                self._proc_musica = proc
+        self._inyectar(proc, pcm)
         return proc
+
+    def _olvidar(self, proc):
+        # Saca un hijo del registro cuando ya termino (asi no crece sin fin).
+        with self._lock:
+            self._procs_vivos.discard(proc)
+            if self._proc_musica is proc:
+                self._proc_musica = None
+
+    def _matar(self, proc):
+        if proc is None:
+            return
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
     def _ruta_efecto(self):
         # Un archivo por efecto, para no pisar uno que MCI todavia tiene
@@ -131,22 +186,15 @@ class GestorAudioNativo(object):
         # Relanza el reproductor cada vez que termina la cancion. El pipe
         # aplica contrapresion, asi que escribir el PCM ya marca el ritmo.
         while self.reproduciendo_musica and not self.silenciado:
-            proc = self._lanzar_linux(pcm)
+            proc = self._lanzar_linux(pcm, es_musica=True)
             if proc is None:
                 break
-            with self._lock:
-                self._proc_musica = proc
             while proc.poll() is None:
                 if not self.reproduciendo_musica or self.silenciado:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
+                    self._matar(proc)
                     break
                 time.sleep(0.08)
-            with self._lock:
-                if self._proc_musica is proc:
-                    self._proc_musica = None
+            self._olvidar(proc)
 
     def _loop_mci(self, pcm):
         # MCI abre por ruta, asi que hay que pasarle bytes ANSI y no unicode.
@@ -186,6 +234,7 @@ class GestorAudioNativo(object):
 
         self.musica_actual = firma
         self._pcm_actual = pcm
+        self._firma_actual = firma
         self.reproduciendo_musica = True
 
         if IS_LINUX:
@@ -219,11 +268,7 @@ class GestorAudioNativo(object):
             # termina su cancion, aunque el juego ya haya cerrado.
             with self._lock:
                 proc, self._proc_musica = self._proc_musica, None
-            if proc is not None:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+            self._matar(proc)
 
     # EFECTOS
     # -------
@@ -235,12 +280,13 @@ class GestorAudioNativo(object):
 
         if IS_LINUX:
             def _sfz_linux():
-                proc = self._lanzar_linux(pcm)
+                proc = self._lanzar_linux(pcm, es_musica=False)
                 if proc is not None:
                     try:
                         proc.wait()
                     except Exception:
                         pass
+                    self._olvidar(proc)
             t = threading.Thread(target=_sfz_linux)
             t.daemon = True
             t.start()
@@ -291,15 +337,26 @@ class GestorAudioNativo(object):
             self.detener_musica()
             tracker.limpiar_cache()
         else:
-            # Para retomar hay que volver a pedir la cancion: la cache se
-            # vacio al silenciar, y el .brick la vuelve a pedir en el proximo
-            # evento. Si no hay ninguna, el juego sigue en silencio.
+            # Retomar. Antes solo se ponia musica_actual=None y se esperaba a
+            # que el .brick pidiera la cancion otra vez, pero ON_START no
+            # vuelve a dispararse: pulsar "Audio: ON" no hacia sonar nada.
+            # _pcm_actual sigue teniendo los bytes, asi que se relanza directo.
             self.musica_actual = None
+            if self._pcm_actual:
+                self.reproducir_musica_fondo(self._pcm_actual, self._firma_actual)
         return self.silenciado
 
     def detener_todo(self):
         """Libera todo. Se llama antes de destruir la ventana."""
         self.detener_musica()
+        # Los efectos de sonido son procesos sueltos, sin relacion con la
+        # musica, y antes no se guardaban en ningun sitio: al cerrar el
+        # juego seguian sonando solos.
+        with self._lock:
+            pendientes = list(self._procs_vivos)
+            self._procs_vivos.clear()
+        for proc in pendientes:
+            self._matar(proc)
         if IS_WIN and _mci:
             try:
                 for i in range(8):
