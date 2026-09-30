@@ -99,39 +99,30 @@ END
 
 ---------------------------------- NUEVAS LÓGICAS DE JUEGO -----------------------------------------
 
->>>>>> Se agrega lógica para el power-up "Bomba" en el archivo tetris_reborn.brick:
+>>>>>> Se agregó la lógica especial de los Power-Ups dentro del motor en Python:
 
-ON PIECE_LAND:
-    IF CURRENT_PIECE IS POWERUP:
-        EXPLODE_RADIUS 1
-        SPAWN RANDOM_SHAPE
-    END
-END
+La lógica de explosión y limpieza de filas/columnas de los Power-Ups fue programada directamente en el método `tetris_fijar_pieza()`
+de la clase Tetris en Python, evaluando la variable `pieza_nombre`.
 
 >>>>>> Se implementó un sistema de elección aleatoria de Power-Up cuando la condición de aparición de este sea satisfecha.
-Hay una probabilidad de que no aparezca ningún Power-Up incluso con la condición de aparición satisfecha (runtime.py line 412-427):
+Hay un 75% de probabilidad de que aparezca un Power-Up (repartido equitativamente en 18.75% cada uno) y un 25% de que no aparezca nada, luego de limpiar cualquier línea:
 
 if lineas_limpias >= 1:
             eleccion = random.random()
-            if eleccion < 0.25:
-                self.siguiente_powerup = 'POWERUP'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.25 and eleccion < 0.45:
-                self.siguiente_powerup = 'CLEAR_LINE_PIECE'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.45 and eleccion < 0.65:
-                self.siguiente_powerup = 'SUPERBOMBA'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.65 and eleccion < 0.80:
-                self.siguiente_powerup = "CLEAR_THREE_PIECE"
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
+            if eleccion < 0.1875:
+                candidato = 'POWERUP'
+            elif eleccion < 0.375:
+                candidato = 'CLEAR_LINE_PIECE'
+            elif eleccion < 0.5625:
+                candidato = 'SUPERBOMBA'
+            elif eleccion < 0.75:
+                candidato = "CLEAR_THREE_PIECE"
             else:
-                self.siguiente_powerup = None
+                candidato = None
 
+>>>>>> Se añaden las funciones especiales (radio de explosión y limpiar filas/columnas) de cada uno de los Power-Up en el método `tetris_fijar_pieza()`:
 
->>>>>> Se añaden a runtime.py las funciones especiales (radio de explosión y limpiar filas/columnas) de cada uno de los Power-Up (runtime.py line 309-388):
-
->>>>>> Se añade el cálculo de Probabilidad Ponderada haciendo uso de la librería Bisect (runtime.py line 29-40):
+>>>>>> Se añade el cálculo de Probabilidad Ponderada haciendo uso de la librería Bisect:
 
 def eleccion_ponderada(items, pesos):
     if len(items) != len(pesos):
@@ -146,26 +137,9 @@ def eleccion_ponderada(items, pesos):
     tiro = random.randint(1, s)
     return items[bisect.bisect_left(acum, tiro)]
 
------------------------------- CAMBIOS EN ARCHIVOS DE EJECUCION ------------------------------ 
-
->>>>>> Se modifica el archivo jugar.bat para añadir un menú interactivo que enumera los juegos disponibles 
-y pide como valor de entrada un número correspondiente a uno de los juegos disponibles o directamente 
-el nombre de alguno de los juegos para facilitar el manejo de los mismos:
-
-[:Pedir
-echo.
-echo  Menu de Juegos:
-for /L %%i in (1,1,!Count!) do (
-    echo  %%i^) !Game_%%i!
-)
-echo.
-set "Juego="
-set /p Juego="Selecciona un Numero o Nombre: "
-goto :eof]
-
 ------------------------------ CAMBIOS DE COLORES, ESTÉTICA DEL PROGRAMA Y SUS COMPONENTES ------------------------------ 
 
->>>>>> Se añaden códigos de colores básicos en el archivo runtime.py y se añade la lista de colores "Arcoiris":
+>>>>>> Se añaden códigos de colores básicos y se añade la lista de colores "Arcoiris":
 
 Colores = {
     "CYAN": "#00FFFF",
@@ -181,13 +155,13 @@ Colores = {
 }
 Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
 
->>>>>> La estética de la ventana emergente en la que se ejecutan los juegos fue modificada (runtime.py line 479-520): 
+>>>>>> La estética de la ventana emergente en la que se ejecutan los juegos fue modificada: 
 Se ha cambiado el color de fondo a uno más oscuro (#1e1e2e) y el color del texto a uno más brillante (#03a80b). 
 
 ------------------------------ UTILIDADES ------------------------------ 
 
 >>>>>> Se añadió una función que facilita la identificación de cada Power-Up al mostrar una notificación que indica el nombre del 
-Power-Up que apareció al aparecer este en la zona de juego (runtime.py):
+Power-Up que apareció al aparecer este en la zona de juego:
 
 def mostrar_notificacion_powerup(self, nombre_powerup):
         if nombre_powerup == "SUPERBOMBA":
@@ -198,3 +172,96 @@ def mostrar_notificacion_powerup(self, nombre_powerup):
             texto_notif = "Power Up:LIMPIA COLUMNAS"
         elif nombre_powerup == "POWERUP":
             texto_notif = "Power Up:BOMBA"
+
+------------------------------ ARQUITECTURA DEL MOTOR DE JUEGO ------------------------------ 
+
+>>>>>> Se refactorizó por completo el archivo principal, pasando de ser un archivo monolítico a un diseño modular orientado a objetos:
+
+Lógica detrás del cambio: El archivo original manejaba toda la lógica de todos los juegos simultáneamente (más de 500 líneas), dificultando la escalabilidad y mantenimiento. 
+Se optó por una arquitectura modular donde una clase base maneja todo lo común (ventana, grid, input)
+
+- Clase base estandarizada.
+- Clases hijas contienen lógicas específicas de cada juego.
+- Archivo de utilidades maneja las elecciones aleatorias ponderadas y paletas de colores.
+- Archivo principal ahora funciona únicamente como un lanzador limpio.
+
+Líneas clave en el lanzador principal (ahora es muy pequeño):
+    try:
+        juego = crear_juego(datos_juego)
+    except ValueError as e:
+        print ("Error: " + str(e))
+        sys.exit(1)
+    juego.run()
+
+------------------------------ MEJORAS AL COMPILADOR ------------------------------ 
+
+>>>>>> Se añadieron métodos para hacer el Parser más robusto y permitir lectura de parámetros avanzados:
+
+Lógica detrás del cambio: El compilador base crasheaba si los archivos no terminaban de la forma esperada o si había un tipo de dato incorrecto (ej. letras donde iba un número). 
+Se crearon funciones para "espiar" tokens sin consumirlos y para asegurar validaciones de tipo numérico.
+
+Código clave añadido al Parser:
+    def ver(self):
+        # Proximo token o None si se acabo (evita IndexError en truncados)
+        if self.posicion < len(self.tokens):
+            return self.tokens[self.posicion]
+        return None
+
+    def consumir_numero(self):
+        token = self.consumir()
+        if token is None:
+            raise Exception("Error de sintaxis: se esperaba un numero...")
+        try:
+            return int(token)
+        except ValueError:
+            raise Exception("Error de sintaxis...")
+
+------------------------------ CAMBIOS EN GRAMÁTICAS FORMALES ------------------------------ 
+
+>>>>>> Se modificaron las reglas gramaticales formales para reflejar y permitir la lectura de propiedades de color y probabilidad:
+
+Lógica detrás del cambio: Como ahora las piezas pueden tener colores específicos y probabilidades de aparición para los Power-Ups, 
+el lenguaje original debía expandir sus reglas para que el compilador sepa qué esperar.
+
+Cambio en las gramáticas:
+-<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> ":" <estados> "END"
++<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <extras> ":" <estados> "END"
++<extras> ::= "" | "COLOR" <identificador> | "CHANCE" <numero> | "COLOR" <identificador> "CHANCE" <numero>
+
+------------------------------ NUEVOS JUEGOS Y ARCHIVOS BASE ------------------------------ 
+
+>>>>>> Creación de remakes y evolución de los juegos originales:
+
+- Se añadió un nuevo archivo de juego para presentar posteriormente una versión mejorada de Snake original.
+- Se añadió la versión definitiva de Tetris con los nuevos Power-Ups. 
+- Los archivos originales se mantuvieron intactos por retrocompatibilidad, así como sus gramáticas base.
+
+------------------------------ ENTORNO DE TESTING AUTOMATIZADO ------------------------------ 
+
+>>>>>> Creación de una suite completa de Testing:
+
+Lógica detrás del cambio: En un proyecto que creció enormemente, hacer pruebas manuales toma demasiado tiempo y es propenso a fallos. Se integró una batería de tests para simular comportamientos sin necesidad de abrir el programa en sí.
+
+- Se añadió un archivo especial que hace un Mock de la librería gráfica. De este modo, los tests automáticos se pueden ejecutar silenciosamente sin que miles de ventanas emerjan en la pantalla durante el proceso.
+
+------------------------------ SCRIPTS DE EJECUCIÓN MEJORADOS ------------------------------ 
+
+>>>>>> Se mejoró drásticamente la detección de juegos, implementando un Menú Interactivo Dinámico:
+
+Lógica detrás del cambio: El script original obligaba a escribir el comando pasándole el nombre de archivo exacto. 
+Con la llegada de los nuevos remakes, era necesario un menú que presentara dinámicamente todos los juegos disponibles sin tener que añadir cada título manualmente.
+
+Código clave añadido al script (Descubrimiento Automático):
+REM Descubre los juegos disponibles a partir de los archivos locales (nada hardcodeado).
+dir /b "games\*.brick" >nul 2>&1
+
+Código clave (Menú):
+:Pedir
+echo  Menu de Juegos:
+for /L %%i in (1,1,!Count!) do (
+    echo  %%i^) !Game_%%i!
+)
+set /p Juego="Selecciona un Numero o Nombre: "
+
+>>>>>> Se añadió compatibilidad con Linux/macOS:
+Se creó desde cero un script que replica la lógica de compilación y ejecución del menú para ecosistemas de terminal bash/sh nativamente.

@@ -219,16 +219,15 @@ class Tetris(Game):
             return
         self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.grid) if i not in Llenas]
         for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
-        # Triple (>= 3) da premio; simple/doble solo puntaje.
-        if lineas_limpias >= 3:
+        if lineas_limpias >= 1:
             eleccion = random.random()
-            if eleccion < 0.25:
+            if eleccion < 0.1875:
                 candidato = 'POWERUP'
-            elif eleccion < 0.45:
+            elif eleccion < 0.375:
                 candidato = 'CLEAR_LINE_PIECE'
-            elif eleccion < 0.65:
+            elif eleccion < 0.5625:
                 candidato = 'SUPERBOMBA'
-            elif eleccion < 0.80:
+            elif eleccion < 0.75:
                 candidato = "CLEAR_THREE_PIECE"
             else:
                 candidato = None
