@@ -129,6 +129,17 @@ class Tetris(Game):
             # ON ROTATE: PLAY_EFFECT ... suena al rotar de verdad.
             self.ejecutar_evento('ON_ROTATE')
 
+    def tetris_aplicar_gravedad(self):
+        # Tras una explosion o limpieza quedan celdas flotando: compacta cada
+        # columna hacia abajo conservando el orden de las que sobreviven.
+        for x in range(self.ancho):
+            Columna = [self.grid[y][x] for y in range(self.alto) if self.grid[y][x] != 0]
+            for y in range(self.alto):
+                if y < len(Columna):
+                    self.grid[self.alto - 1 - y][x] = Columna[len(Columna) - 1 - y]
+                else:
+                    self.grid[self.alto - 1 - y][x] = 0
+
     def tetris_fijar_pieza(self):
         matriz_pieza = self.pieza_actual[self.pieza_rotacion]
 
@@ -146,6 +157,7 @@ class Tetris(Game):
                         self.grid[ny][nx] = 0
             self.puntuacion += 150
             self.ejecutar_evento('ON_EXPLOSION')
+            self.tetris_aplicar_gravedad()
 
         elif es_superbomba:
             base_x, base_y = int(self.pieza_x), int(self.pieza_y)
@@ -158,6 +170,7 @@ class Tetris(Game):
                         self.grid[ny][nx] = 0
             self.puntuacion += 350
             self.ejecutar_evento('ON_EXPLOSION')
+            self.tetris_aplicar_gravedad()
 
         elif es_limpia_columnas:
             columnas_a_borrar = set()
@@ -174,6 +187,7 @@ class Tetris(Game):
                     self.grid[py][px] = 0
 
             self.puntuacion += len(columnas_a_borrar) * 250
+            self.tetris_aplicar_gravedad()
 
         elif es_limpia_filas:
             filas_a_borrar = set()

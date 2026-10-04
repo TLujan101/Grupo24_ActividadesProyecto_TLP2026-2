@@ -5,12 +5,15 @@ RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 3)
   ponderado con bisect (B-mecánica), power-ups y spawn tras triple-línea
   (C-mecánica), audio sintetizado desde el .brick, scripts jugar.bat/sh,
   reorg engine/+docs/ y .bnf extendida (D).
+  
 - TLujan101 (toolchain y documento): .brick/.bnf iniciales y actualizados,
   ajustes a compiler.py/jugar.bat-sh/runtime.py, creación de este documento
   (E2-base) e integración de los PRs #1/#2/#3/#7 como filtro de calidad.
+  
 - Daniel (totoratsu) (arquitectura y calidad): paquete engine/ (Game/Tetris/
   Snake), simplificación del compilador, CI con tests en cada PR y hook
   pre-commit; su infraestructura es la que verifica la regla de oro (D).
+  
 - Andrés (diseño y balanceo): valores CHANCE y condición de aparición de
   power-ups (B-valores, C-condición), estados del .brick (comodín e I) y
   co-redacción de este changelog (E2).
@@ -165,13 +168,16 @@ if lineas_limpias >= 3:
         self.siguiente_powerup = candidato
         self.mostrar_notificacion_powerup(self.siguiente_powerup)
 
->>>>>> Efectos de cada Power-Up en engine/tetris.py (tetris_fijar_pieza, lineas 132-211):
+>>>>>> Efectos de cada Power-Up en engine/tetris.py (tetris_fijar_pieza y tetris_aplicar_gravedad):
 
 Cada forma especial se detecta por nombre al fijarse y aplica su efecto en vez
 de pintar celdas normales: POWERUP borra radio 3x3 (+150 pts, dispara
 ON_EXPLOSION), SUPERBOMBA borra radio 5x5 (+350 pts, dispara ON_EXPLOSION),
 CLEAR_LINE_PIECE vacía las filas ocupadas (+200 por fila) y CLEAR_THREE_PIECE
-vacía las columnas ocupadas (+250 por columna).
+vacía las columnas ocupadas (+250 por columna). Tras borrar por explosión o
+por columnas, las celdas que quedan flotando caen por gravedad
+(tetris_aplicar_gravedad en el mismo archivo: compacta cada columna hacia
+abajo conservando el orden).
 
 >>>>>> Probabilidad ponderada por CHANCE en engine/utilidades.py (lineas 21-32):
 

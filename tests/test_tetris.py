@@ -188,9 +188,10 @@ class TestTetris(TestTetrisBase):
             juego.grid[y] = [1, 1, 1, 1, 1, 0]
         poner_pieza(juego, 'SUPERBOMBA', 1, 3)
         juego.tetris_fijar_pieza()
-        self.assertEqual(juego.grid[1], [1, 1, 1, 1, 1, 0])
-        for y in range(2, 6):
+        # La fila 1 sobrevive a la explosion pero cae por gravedad hasta abajo
+        for y in range(1, 5):
             self.assertEqual(juego.grid[y], [0] * 6, 'superbomba')
+        self.assertEqual(juego.grid[5], [1, 1, 1, 1, 1, 0], 'gravedad tras superbomba')
         self.assertEqual(juego.puntuacion, 350)
 
         # Limpia columnas
