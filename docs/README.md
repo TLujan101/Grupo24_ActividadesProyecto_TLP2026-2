@@ -29,7 +29,7 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 1. Este índice (`README.md`): panorama del proyecto.
 2. [`Guia-BrickScript.txt`](Guia-BrickScript.txt): guía del lenguaje (sintaxis de Tetris y Snake, colores, CHANCE, eventos extendidos).
 3. [`Instalacion.txt`](Instalacion.txt): requisitos (Python 2.7), estructura y solución de problemas.
-4. [`Lenguajes.md`](Lenguajes.md): cómo funciona la música programada en el `.brick`.
+4. [`Musica-BrickScript.md`](Musica-BrickScript.md): cómo funciona la música programada en el `.brick`.
 5. [`cambios/`](cambios/): registro de cambios de la Actividad 3 (formas, motor, scripts `jugar`).
 
 ## Tests

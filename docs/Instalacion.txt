@@ -42,7 +42,7 @@ Para que los scripts funcionen correctamente, los archivos deben estar organizad
     |                        mas apoyos internos: audio, tracker, utilidades)
     +--- grammars\           (Gramaticas BNF del lenguaje)
     +--- docs\               (Documentacion: README indice, Guia-BrickScript,
-    |                        Instalacion, Lenguajes y registro de cambios/)
+    |                        Instalacion, Musica-BrickScript y registro de cambios/)
     \--- tests\              (Tests automaticos)
 
 
