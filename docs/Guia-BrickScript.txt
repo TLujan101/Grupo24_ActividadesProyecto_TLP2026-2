@@ -7,7 +7,7 @@ BrickScript es un lenguaje de programacion simple (un "DSL" o Lenguaje de Domini
 Este proyecto incluye el compilador que traduce el codigo BrickScript a un formato que la computadora entiende, y el motor de juego que lo ejecuta.
 
 El runtime usa Python 2.7 con Tkinter y funciona en Windows y Linux.
-Los pasos de instalacion estan en INSTALL.txt (en la raiz del repositorio).
+Los pasos de instalacion estan en docs/Instalacion.txt.
 
 -------------------------------------------------------------
                       COMO JUGAR

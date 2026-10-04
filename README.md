@@ -1,46 +1,12 @@
 # Actividades y Proyectos Grupo 24 TLP 2026-2 UNAL MED
 Repositorio para el desarrollo colaborativo de actividades y proyectos para la materia Teoría de Lenguajes de Programación (Profesor: Fernan Alonso Villa)
 
-## Avance del Proyecto Final
-- [x] Actividad 1: Equipo (13 sep)
-- [x] Actividad 2: Entorno (22 sep)
-- [ ] Actividad 3: Tetris+ (06 oct)
-- [ ] Actividad 4: Snake+ (27 oct)
-- [ ] Actividad 5: Tanks (17 nov)
-- [ ] Actividad 6: Integración (07 dic)
+Documentación completa en [`docs/`](docs/) — índice: [`docs/README.md`](docs/README.md).
 
-## Estructura del repositorio
+## Jugar
+Con Python 2.7, desde la raíz del repo:
 ```
-├── compiler.py      Compilador: traduce un .brick a .json
-├── runtime.py       Carga el .json y arranca el juego correspondiente
-├── jugar.bat        Compila y juega (Windows)
-├── jugar.sh         Compila y juega (Linux)
-├── games/           Código BrickScript (.brick) de cada juego y sus variantes
-├── engine/          Lógica en Python de cada tipo de juego (Tetris, Snake, ...)
-│                   más apoyos internos (audio, tracker, utilidades)
-├── grammars/        Gramáticas BNF del lenguaje
-├── docs/            Documentación y registro de cambios
-├── tests/           Tests automáticos
-├── .githooks/       Hook de pre-commit (corre los tests)
-├── INSTALL.txt      Requisitos e instalación
-└── README.txt       Guía del lenguaje BrickScript
+jugar.bat tetris_reborn   (Windows, cmd.exe)
+./jugar.sh tetris_reborn  (Linux)
 ```
-
-## Tests
-Cada PR hacia `main` corre [`.github/workflows/tests.yml`](.github/workflows/tests.yml), que verifica:
-1. Que todo el código Python compila (y pasa pyflakes).
-2. Que todos los `.brick` de `games/` compilan.
-3. **Retrocompatibilidad:** los juegos clásicos (los `.brick` sin *reborn* ni *remake* en el nombre) siguen funcionando con el compilador y el motor actuales.
-4. Todos los tests unitarios y de integración.
-
-Para correrlos en local (desde la raíz del repo):
-```
-python2 -m unittest discover -s tests -t . -v
-```
-
-## Pre-commit (una sola vez por clon)
-Antes de cada commit se corren los tests y, si alguno falla, el commit se cancela. Se activa con:
-```
-git config core.hooksPath .githooks
-```
-Si no lo activas, igual el PR no se puede mezclar con los checks en rojo. No uses `--no-verify` para saltarte el hook.
+Sin argumento muestra el menú de juegos en `games/`.

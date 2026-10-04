@@ -30,7 +30,7 @@ Para que los scripts funcionen correctamente, los archivos deben estar organizad
     +--- runtime.py          (Carga el .json y arranca el juego correspondiente)
     +--- jugar.bat           (El script para compilar y jugar facilmente)
     +--- jugar.sh            (Lo mismo que jugar.bat, para Linux)
-    +--- README.txt          (Informacion general del lenguaje)
+    +--- README.md           (Portada: apunta a docs/)
     |
     +--- games\              (Codigo fuente BrickScript de cada juego)
     |    +--- tetris.brick    (Tetris clasico)
@@ -41,7 +41,8 @@ Para que los scripts funcionen correctamente, los archivos deben estar organizad
     +--- engine\             (Logica en Python de cada tipo de juego,
     |                        mas apoyos internos: audio, tracker, utilidades)
     +--- grammars\           (Gramaticas BNF del lenguaje)
-    +--- docs\               (Documentacion y registro de cambios)
+    +--- docs\               (Documentacion: README indice, Guia-BrickScript,
+    |                        Instalacion, Lenguajes y registro de cambios/)
     \--- tests\              (Tests automaticos)
 
 
