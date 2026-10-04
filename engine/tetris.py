@@ -288,7 +288,7 @@ class Tetris(Game):
 
     def tetris_evaluar_powerup(self, lineas_limpias):
         # Triple (>= 3) da premio; simple/doble solo puntaje.
-        if lineas_limpias >= 3:
+        if lineas_limpias >= 1:
             eleccion = random.random()
             if eleccion < 0.25:
                 candidato = 'POWERUP'
