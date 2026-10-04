@@ -4,8 +4,11 @@
 import random
 import Tkinter as tk
 
-from .game import Game
+from .game import Game, COLOR_GRID_FIJA
 from .utilidades import Colores, Arcoiris, eleccion_ponderada
+
+# Frames que parpadean las filas antes de borrarse de verdad (~300 ms).
+MAX_FRAMES_ANIMACION_LINEAS = 6
 
 
 class Tetris(Game):
@@ -32,15 +35,21 @@ class Tetris(Game):
             self._pesos_piezas.append(PesoPool)
         self.pieza_x, self.pieza_y, self.pieza_rotacion = 0, 0, 0
         self.velocidad_gravedad = 0.4
+        self.lineas_animandose = set()
+        self.frames_animacion_lineas = 0
 
     def ejecutar_accion(self, verbo, objeto, accion):
         if verbo == 'SPAWN': self.tetris_spawn_pieza()
         if verbo == 'MOVE': self.tetris_mover_pieza(accion['params'][0])
         if verbo == 'ROTATE': self.tetris_rotar_pieza()
 
+    def color_celda_grid(self, x, y):
+        # Delegado: el parpadeo del borrado vive en Tetris.
+        return self.tetris_color_celda_grid(x, y)
+
     def dibujar_elementos(self):
-        # Dibujar la pieza actual de Tetris
-        if self.pieza_actual:
+        # La pieza se oculta mientras las filas parpadean.
+        if self.pieza_actual and not self.lineas_animandose:
             matriz_pieza = self.pieza_actual[self.pieza_rotacion]
             for y_offset, fila in enumerate(matriz_pieza):
                 for x_offset, celda in enumerate(fila):
@@ -125,6 +134,20 @@ class Tetris(Game):
         nueva_rotacion = (self.pieza_rotacion + 1) % len(self.pieza_actual)
         if not self.tetris_verificar_colision(self.pieza_x, self.pieza_y, nueva_rotacion):
             self.pieza_rotacion = nueva_rotacion
+            # Solo si la rotacion se pudo hacer: un .brick con
+            # ON ROTATE: PLAY_EFFECT ... suena al rotar de verdad.
+            self.ejecutar_evento('ON_ROTATE')
+
+    def tetris_aplicar_gravedad(self):
+        # Tras una explosion o limpieza quedan celdas flotando: compacta cada
+        # columna hacia abajo conservando el orden de las que sobreviven.
+        for x in range(self.ancho):
+            Columna = [self.grid[y][x] for y in range(self.alto) if self.grid[y][x] != 0]
+            for y in range(self.alto):
+                if y < len(Columna):
+                    self.grid[self.alto - 1 - y][x] = Columna[len(Columna) - 1 - y]
+                else:
+                    self.grid[self.alto - 1 - y][x] = 0
 
     def tetris_fijar_pieza(self):
         matriz_pieza = self.pieza_actual[self.pieza_rotacion]
@@ -142,6 +165,8 @@ class Tetris(Game):
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
                         self.grid[ny][nx] = 0
             self.puntuacion += 150
+            self.ejecutar_evento('ON_EXPLOSION')
+            self.tetris_aplicar_gravedad()
 
         elif es_superbomba:
             base_x, base_y = int(self.pieza_x), int(self.pieza_y)
@@ -153,6 +178,8 @@ class Tetris(Game):
                     if 0 <= ny < self.alto and 0 <= nx < self.ancho:
                         self.grid[ny][nx] = 0
             self.puntuacion += 350
+            self.ejecutar_evento('ON_EXPLOSION')
+            self.tetris_aplicar_gravedad()
 
         elif es_limpia_columnas:
             columnas_a_borrar = set()
@@ -169,6 +196,7 @@ class Tetris(Game):
                     self.grid[py][px] = 0
 
             self.puntuacion += len(columnas_a_borrar) * 250
+            self.tetris_aplicar_gravedad()
 
         elif es_limpia_filas:
             filas_a_borrar = set()
@@ -198,8 +226,15 @@ class Tetris(Game):
                             self.grid[py][px] = 1
 
         self.pieza_actual = None
+        # Toda pieza que llega al suelo dispara este evento, sin importar si
+        # era normal o un power-up. Los poderes con radio (bomba, superbomba)
+        # disparan ademas ON_EXPLOSION.
+        self.ejecutar_evento('ON_PIECE_LAND')
         self.tetris_limpiar_lineas()
-        self.ejecutar_evento('ON_START')
+        # Con animacion de borrado la siguiente pieza espera al final del
+        # parpadeo: asi el power-up del triple llega de una, no un turno tarde.
+        if not self.animacion_borrado_activa():
+            self.ejecutar_evento('ON_START')
 
     def tetris_verificar_colision(self, x, y, rotacion):
         if not self.pieza_actual: return False
@@ -212,13 +247,46 @@ class Tetris(Game):
                         return True
         return False
 
+    def tetris_iniciar_animacion_borrado(self, filas):
+        # Las filas a eliminar se marcan y se borran de verdad tras 6 frames:
+        # mientras tanto el tablero queda congelado (sin gravedad ni piece).
+        self.lineas_animandose = set(filas)
+        self.frames_animacion_lineas = 0
+
+    def animacion_borrado_activa(self):
+        return bool(self.lineas_animandose)
+
+    def avanzar_animacion_borrado(self):
+        # Un frame del parpadeo: al sexto, borra de verdad.
+        self.frames_animacion_lineas += 1
+        if self.frames_animacion_lineas < MAX_FRAMES_ANIMACION_LINEAS:
+            return
+        filas = sorted(self.lineas_animandose)
+        lineas_limpias = len(filas)
+        self.lineas_animandose = set()
+        self.frames_animacion_lineas = 0
+        self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + \
+                    [fila for i, fila in enumerate(self.grid) if i not in filas]
+        for _ in range(lineas_limpias):
+            self.ejecutar_evento('ON_LINE_CLEAR')
+        # Primero se decide el premio y despues se genera la pieza, para que
+        # ON_START sirva directamente el power-up sorteado.
+        self.tetris_evaluar_powerup(lineas_limpias)
+        self.ejecutar_evento('ON_START')
+
     def tetris_limpiar_lineas(self):
         Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]
-        lineas_limpias = len(Llenas)
-        if lineas_limpias == 0:
+        if not Llenas:
             return
-        self.grid = [[0] * self.ancho for _ in range(lineas_limpias)] + [fila for i, fila in enumerate(self.grid) if i not in Llenas]
-        for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
+        self.tetris_iniciar_animacion_borrado(Llenas)
+
+    def tetris_color_celda_grid(self, x, y):
+        # Las filas que se estan borrando parpadean blanco/gris.
+        if y in self.lineas_animandose:
+            return '#FFFFFF' if self.frames_animacion_lineas % 2 == 0 else '#555555'
+        return COLOR_GRID_FIJA
+
+    def tetris_evaluar_powerup(self, lineas_limpias):
         # Triple (>= 3) da premio; simple/doble solo puntaje.
         if lineas_limpias >= 3:
             eleccion = random.random()

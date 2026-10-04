@@ -62,7 +62,7 @@ echo ----------------------------------
 REM Se elimina la pausa para iniciar la GUI inmediatamente
 
 REM --- FASE 2: EJECUCION ---
-REM Ejecuta el motor del juego (runtime.py modificado con GUI).
+REM Ejecuta el motor del juego (runtime.py, GUI en engine/ con Tkinter).
 C:\Python27\python.exe .\runtime.py "%Json%"
 
 REM Fin del script.

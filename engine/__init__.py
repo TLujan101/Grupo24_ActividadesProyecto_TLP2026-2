@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 # engine --- Un archivo por juego. Todos heredan de Game (game.py).
+# Modulos de apoyo: audio.py/tracker.py (musica sintetizada),
+# utilidades.py (colores y sorteo ponderado).
 #
 # Para agregar un juego nuevo:
 #   1. Crear engine/<nombre>.py con una clase hija de Game.

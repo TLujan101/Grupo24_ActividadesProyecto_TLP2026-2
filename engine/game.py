@@ -13,8 +13,10 @@
 #   - color_celda_grid(x, y): (opcional) color de una celda fija.
 
 import sys
-# Tkinter es la libreria GUI estandar de Python, compatible con 2.7
 import Tkinter as tk
+
+from . import tracker
+from .audio import GestorAudioNativo
 
 COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas
 
@@ -35,7 +37,6 @@ class Game(object):
         # --- Configuracion de la GUI ---
         self.root = tk.Tk()
         self.root.title("BrickScript - " + self.tipo_juego)
-        # Configurar la accion al cerrar la ventana ('X' de la barra de titulo)
         self.root.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
 
         self.taman_celda = 25 # Pixeles por celda
@@ -53,26 +54,34 @@ class Game(object):
         self.label_score = tk.Label(self.marco_score, text="PUNTUACION\n0", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 16, 'bold'))
         self.label_score.pack(pady=40, padx=10)
 
-        # Nota: Se ha eliminado 'Q: Salir' de los controles en pantalla
         self.label_controles = tk.Label(self.marco_score, text="CONTROLES\nFlechas: Mover/Rotar", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 10))
         self.label_controles.pack(pady=20, padx=10)
 
-        # Configurar eventos de teclado. Usamos <Key> para capturar cualquier tecla
+        # Boton de silencio (verde suena, gris no). Solo si el .brick
+        # declara audio: si no, solo ocuparia espacio.
+        self.audio = self.crear_audio()
+        if self.tiene_audio():
+            self.btn_sonido = tk.Button(self.marco_score, text="Audio: ON",
+                                        command=self.toggle_audio,
+                                        font=('Consolas', 10, 'bold'),
+                                        bg='#2a2a3e', fg='#03a80b')
+            self.btn_sonido.pack(pady=10, padx=10)
+
         self.root.bind('<Key>', self.manejar_input_gui)
 
-        # Estado propio de cada juego (definido por la clase hija)
         self.inicializar_estado()
 
+        self._game_over_emitido = False
         self.timer_gravedad = 0
         self.ejecutar_evento('ON_START')
-        self.timer_id = None # Para controlar el loop de Tkinter
+        self.timer_id = None
 
 
     # METODOS QUE CADA JUEGO DEBE SOBREESCRIBIR
     # -----------------------------------------
 
     def inicializar_estado(self):
-        # Debe crear las variables propias del juego y self.velocidad_gravedad
+        # Variables propias del juego y self.velocidad_gravedad.
         raise NotImplementedError("El juego debe implementar inicializar_estado()")
 
     def ejecutar_accion(self, verbo, objeto, accion):
@@ -80,43 +89,109 @@ class Game(object):
         raise NotImplementedError("El juego debe implementar ejecutar_accion()")
 
     def dibujar_elementos(self):
-        # Dibuja las piezas/jugadores que se mueven sobre la cuadricula
+        # Piezas/jugadores sobre la cuadricula.
         raise NotImplementedError("El juego debe implementar dibujar_elementos()")
 
     def color_celda_grid(self, x, y):
-        # Color de una celda fija de la cuadricula. Se puede sobreescribir.
+        # Color de una celda fija. Sobreescribible.
         return COLOR_GRID_FIJA
+
+    def animacion_borrado_activa(self):
+        # Los juegos con borrado de filas (Tetris) lo sobreescriben.
+        return False
+
+    def avanzar_animacion_borrado(self):
+        # Un frame de la animacion de borrado. Tetris lo sobreescribe.
+        pass
+
+
+    # AUDIO (opcional: sin SONG ni EFFECT el juego arranca en silencio)
+    # -----
+
+    def tiene_audio(self):
+        # SONG o EFFECT declarados en el .brick.
+        return bool(self.datos_juego.get('songs') or self.datos_juego.get('effects'))
+
+    def crear_audio(self):
+        # Los tests lo sobreescriben para no abrir sonido real.
+        return GestorAudioNativo()
+
+    def toggle_audio(self):
+        silenciado = self.audio.alternar_silencio()
+        if silenciado:
+            self.btn_sonido.config(text="Audio: OFF", fg="#888888")
+        else:
+            self.btn_sonido.config(text="Audio: ON", fg="#03a80b")
+
+    def musica_brick(self, nombre):
+        # Sintetiza la cancion (queda en RAM) y la pone en bucle.
+        canciones = self.datos_juego.get('songs', {})
+        if not nombre or nombre not in canciones:
+            return
+        notas = canciones[nombre].get('notas', [])
+        firma = tracker.firma_partitura(notas)
+
+        # Idempotente: ON_START se re-dispara al fijar cada pieza.
+        if firma == self.audio.musica_actual and self.audio.reproduciendo_musica:
+            return
+
+        pcm = tracker.cancion_pcm(nombre, notas)
+        if not pcm:
+            return
+        self.audio.reproducir_musica_fondo(pcm, firma)
+
+    def efecto_brick(self, nombre):
+        # Un efecto se sintetiza igual que una cancion pero suena una vez.
+        efectos = self.datos_juego.get('effects', {})
+        if not nombre or nombre not in efectos:
+            return
+        notas = efectos[nombre].get('notas', [])
+        pcm = tracker.cancion_pcm(nombre, notas)
+        if not pcm:
+            return
+        self.audio.reproducir_efecto(pcm)
 
 
     # CICLO DE JUEGO
     # --------------
 
     def run(self):
-        # Inicia el ciclo principal de juego de Tkinter
         self.root.after(50, self.game_loop)
         self.root.mainloop()
 
     def game_loop(self):
         if self.juego_terminado:
+            # ON_GAME_OVER se emite una sola vez.
+            if not self._game_over_emitido:
+                self._game_over_emitido = True
+                self.ejecutar_evento('ON_GAME_OVER')
             self.mostrar_game_over()
             return
 
-        # Logica de TICK/Gravedad
-        # El loop se ejecuta cada 50ms (0.05 segundos)
-        self.timer_gravedad += 0.05
-        if self.timer_gravedad >= self.velocidad_gravedad:
-            self.timer_gravedad = 0
-            self.ejecutar_evento('ON_TICK')
+        # Animacion de borrado: el tablero queda congelado (sin gravedad) hasta
+        # que el juego confirme el borrado de las lineas. El frame en que se
+        # borra tambien dibuja y reprograma el loop como cualquier otro.
+        if self.animacion_borrado_activa():
+            self.avanzar_animacion_borrado()
+        else:
+            # Gravedad: el loop corre cada 50ms.
+            self.timer_gravedad += 0.05
+            if self.timer_gravedad >= self.velocidad_gravedad:
+                self.timer_gravedad = 0
+                self.ejecutar_evento('ON_TICK')
 
         self.dibujar()
 
-        # Programa el siguiente ciclo de juego
         self.timer_id = self.root.after(50, self.game_loop)
 
     def cerrar_ventana(self):
-        # Detiene el loop de juego de forma segura
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
+        # Suelta el audio antes de destruir: si no, queda sonido sonando.
+        try:
+            self.audio.detener_todo()
+        except Exception:
+            pass
         self.root.destroy()
         sys.exit(0)
 
@@ -126,15 +201,10 @@ class Game(object):
 
     def manejar_input_gui(self, event):
         key = event.keysym.upper()
-
-        # La opcion de salir con 'Q' ha sido eliminada.
-
         self.manejar_tecla(key)
 
     def manejar_tecla(self, key):
-        # Las flechas disparan el evento ON_KEY_* del .brick; el juego
-        # concreto decide que hace cada accion en ejecutar_accion().
-        # Un juego que necesite otras teclas puede sobreescribir este metodo.
+        # Las flechas disparan ON_KEY_*; cada juego decide la accion.
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
 
@@ -150,6 +220,11 @@ class Game(object):
                         pass
                 if verbo == 'GAME_OVER': self.juego_terminado = True
 
+                # Audio declarado en el .brick
+                if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
+                if verbo == 'PLAY_EFFECT': self.efecto_brick(objeto)
+                if verbo == 'STOP_MUSIC': self.audio.detener_musica()
+
                 # Acciones propias de cada juego
                 self.ejecutar_accion(verbo, objeto, accion)
 
@@ -159,7 +234,7 @@ class Game(object):
 
     def dibujar(self):
         self.frame += 1
-        self.canvas.delete("all") # Borrar todo en cada frame
+        self.canvas.delete("all")
         self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
 
         # 1. Dibujar la cuadricula estatica (grid base)
@@ -172,9 +247,8 @@ class Game(object):
         self.dibujar_elementos()
 
     def dibujar_celda(self, x, y, color):
-        ts = self.taman_celda # Alias para taman de celda
-        x1, y1 = x * ts, y * ts
-        x2, y2 = x1 + ts, y1 + ts
+        x1, y1 = x * self.taman_celda, y * self.taman_celda
+        x2, y2 = x1 + self.taman_celda, y1 + self.taman_celda
         self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline='#000000')
 
 
@@ -182,7 +256,6 @@ class Game(object):
     # -----------------------------------
 
     def mostrar_game_over(self):
-        # Crear ventana emergente estilizada con Toplevel
         top = tk.Toplevel(self.root)
         top.title("Game Over")
         top.geometry("320x200")
@@ -220,6 +293,7 @@ class Game(object):
             bd=0,
             padx=20,
             pady=5,
-            command=lambda: (self.root.destroy(), sys.exit(0))
+            # Misma salida que la X: tambien suelta el audio.
+            command=self.cerrar_ventana
         )
         btn_salir.pack(pady=20)

@@ -29,11 +29,11 @@ Si el juego es invalido vuelve a preguntar en vez de abortar.
 Menu interactivo cuando no hay argumento o el juego es invalido:
 
 :Pedir
-echo  Elija un juego:
+echo  Menu de Juegos:
 for /L %%i in (1,1,!Count!) do (
     echo  %%i^) !Game_%%i!
 )
-set /p Juego="Elige un numero o nombre: "
+set /p Juego="Selecciona un Numero o Nombre: "
 
 Resolucion numero-o-nombre a la ruta real del .brick:
 
@@ -131,5 +131,5 @@ imprime "Compilacion exitosa. Iniciando el juego..." y ejecuta:
 5. Nota sobre los .json
 
 Los *.json generados no se versionan
-(.gitignore los excluye: TLP/games/*.json)
+(.gitignore los excluye: games/*.json)
 porque son salida del compilador, no codigo fuente.
