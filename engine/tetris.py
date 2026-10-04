@@ -231,7 +231,10 @@ class Tetris(Game):
         # disparan ademas ON_EXPLOSION.
         self.ejecutar_evento('ON_PIECE_LAND')
         self.tetris_limpiar_lineas()
-        self.ejecutar_evento('ON_START')
+        # Con animacion de borrado la siguiente pieza espera al final del
+        # parpadeo: asi el power-up del triple llega de una, no un turno tarde.
+        if not self.animacion_borrado_activa():
+            self.ejecutar_evento('ON_START')
 
     def tetris_verificar_colision(self, x, y, rotacion):
         if not self.pieza_actual: return False
@@ -266,9 +269,10 @@ class Tetris(Game):
                     [fila for i, fila in enumerate(self.grid) if i not in filas]
         for _ in range(lineas_limpias):
             self.ejecutar_evento('ON_LINE_CLEAR')
-        # La siguiente pieza NO se genera aqui: tetris_fijar_pieza ya lanzo
-        # ON_START al marcar el borrado. Regenerarla haria aparecer dos piezas.
+        # Primero se decide el premio y despues se genera la pieza, para que
+        # ON_START sirva directamente el power-up sorteado.
         self.tetris_evaluar_powerup(lineas_limpias)
+        self.ejecutar_evento('ON_START')
 
     def tetris_limpiar_lineas(self):
         Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]

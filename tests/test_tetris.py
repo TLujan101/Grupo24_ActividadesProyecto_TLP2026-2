@@ -55,6 +55,10 @@ def terminar_animacion(juego):
         juego.game_loop()
 
 
+def casos_powerups():
+    return ('POWERUP', 'CLEAR_LINE_PIECE', 'SUPERBOMBA', 'CLEAR_THREE_PIECE')
+
+
 class TestTetrisBase(unittest.TestCase):
     # Guarda y restaura random.random para poder forzar los power ups
 
@@ -283,7 +287,12 @@ class TestTetris(TestTetrisBase):
             juego.grid[5] = [1] * 6
             juego.tetris_limpiar_lineas()
             terminar_animacion(juego)
-            self.assertEqual(juego.siguiente_powerup, powerup, valor)
+            # El power-up es la pieza que aparece justo despues del triple
+            self.assertEqual(juego.siguiente_powerup, None, valor)
+            if powerup:
+                self.assertEqual(juego.pieza_nombre, powerup, valor)
+            else:
+                self.assertNotIn(juego.pieza_nombre, casos_powerups(), valor)
             if texto:
                 notif = juego.root.hijos[-1]
                 self.assertEqual(notif.opciones.get('text'), texto)
@@ -299,18 +308,22 @@ class TestTetris(TestTetrisBase):
             juego.tetris_limpiar_lineas()
             terminar_animacion(juego)
             self.assertEqual(juego.siguiente_powerup, None, filas)
+            self.assertNotIn(juego.pieza_nombre, casos_powerups(), filas)
 
-        # La siguiente pieza es el power up sorteado
+        # Sin pieza a medias: el triple no cuela una pieza normal en el turno
         self.forzar_random(0.1)
         juego = Tetris(datos_tetris())
         juego.grid[3] = [1] * 6
         juego.grid[4] = [1] * 6
         juego.grid[5] = [1] * 6
+        juego.pieza_actual = None
         juego.tetris_limpiar_lineas()
-        terminar_animacion(juego)
-        self.assertEqual(juego.siguiente_powerup, 'POWERUP')
-        juego.tetris_spawn_pieza()
-        self.assertEqual((juego.pieza_nombre, juego.siguiente_powerup), ('POWERUP', None))
+        self.assertIsNone(juego.pieza_actual, 'no hay pieza durante el parpadeo')
+        for _ in range(MAX_FRAMES_ANIMACION_LINEAS - 1):
+            juego.game_loop()
+            self.assertIsNone(juego.pieza_actual, 'sigue sin pieza')
+        juego.game_loop()
+        self.assertEqual(juego.pieza_nombre, 'POWERUP')
 
     def test_dibujar(self):
         juego = Tetris(datos_tetris())

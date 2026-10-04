@@ -188,9 +188,13 @@ borrado, el puntaje y el sorteo del power-up ocurren en el último frame.
 tetris_limpiar_lineas solo marca las filas; el borrado real lo hace el ciclo
 de juego, que Tetris expone con dos hooks (animacion_borrado_activa y
 avanzar_animacion_borrado) para no mezclar la lógica de Tetris con la de
-otros juegos. Mientras parpadea, la gravedad queda congelada y la pieza actual
-no se dibuja. La pieza siguiente la genera ON_START al fijarse la pieza (no al
-terminar la animación), así no aparece una pieza doble.
+otros juegos. Mientras parpadea, la gravedad queda congelada y no hay pieza en
+pantalla.
+
+El orden importa para que el premio llegue a tiempo: al fijarse una pieza se
+dispara ON_PIECE_LAND, se marca el borrado y NO se genera la siguiente pieza;
+esta aparece al final del parpadeo, después de sortear el power-up. Así un
+triple entrega el power-up en el turno siguiente y no uno tarde.
 
 >>>>>> Probabilidad ponderada por CHANCE en engine/utilidades.py (lineas 21-32):
 Se usa solo stdlib (random + bisect, válido en Python 2.7, sin numpy):
