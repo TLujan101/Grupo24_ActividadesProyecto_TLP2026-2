@@ -101,7 +101,8 @@ class Game(object):
         return False
 
     def avanzar_animacion_borrado(self):
-        return False
+        # Un frame de la animacion de borrado. Tetris lo sobreescribe.
+        pass
 
 
     # AUDIO (opcional: sin SONG ni EFFECT el juego arranca en silencio)
@@ -168,10 +169,10 @@ class Game(object):
             return
 
         # Animacion de borrado: el tablero queda congelado (sin gravedad) hasta
-        # que el juego confirme el borrado de las lineas.
+        # que el juego confirme el borrado de las lineas. El frame en que se
+        # borra tambien dibuja y reprograma el loop como cualquier otro.
         if self.animacion_borrado_activa():
-            if self.avanzar_animacion_borrado():
-                return
+            self.avanzar_animacion_borrado()
         else:
             # Gravedad: el loop corre cada 50ms.
             self.timer_gravedad += 0.05

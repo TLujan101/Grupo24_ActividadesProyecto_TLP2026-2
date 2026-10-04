@@ -254,10 +254,10 @@ class Tetris(Game):
         return bool(self.lineas_animandose)
 
     def avanzar_animacion_borrado(self):
-        # Devuelve True si este frame era el ultimo y ya se borro.
+        # Un frame del parpadeo: al sexto, borra de verdad.
         self.frames_animacion_lineas += 1
         if self.frames_animacion_lineas < MAX_FRAMES_ANIMACION_LINEAS:
-            return False
+            return
         filas = sorted(self.lineas_animandose)
         lineas_limpias = len(filas)
         self.lineas_animandose = set()
@@ -269,7 +269,6 @@ class Tetris(Game):
         # La siguiente pieza NO se genera aqui: tetris_fijar_pieza ya lanzo
         # ON_START al marcar el borrado. Regenerarla haria aparecer dos piezas.
         self.tetris_evaluar_powerup(lineas_limpias)
-        return True
 
     def tetris_limpiar_lineas(self):
         Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]

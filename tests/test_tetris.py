@@ -258,6 +258,12 @@ class TestTetris(TestTetrisBase):
         self.assertEqual(juego.lineas_animandose, set())
         self.assertEqual(juego.grid[5], [0] * 6)
         self.assertEqual(juego.puntuacion, 100)
+        # El loop sigue vivo: cada frame (incluido el del borrado) reprograma
+        self.assertEqual(len(juego.root.afters), MAX_FRAMES_ANIMACION_LINEAS)
+        y_antes = juego.pieza_y
+        for _ in range(9):   # la gravedad necesita velocidad_gravedad / 0.05 frames
+            juego.game_loop()
+        self.assertEqual(juego.pieza_y, y_antes + 1, 'la gravedad se reanuda')
 
     def test_sorteo_de_power_up(self):
         casos = [(0.1, 'POWERUP', 'Power Up:BOMBA'),
@@ -281,7 +287,8 @@ class TestTetris(TestTetrisBase):
             if texto:
                 notif = juego.root.hijos[-1]
                 self.assertEqual(notif.opciones.get('text'), texto)
-                self.assertEqual(juego.root.afters[-1], (2500, notif.destroy))
+                # La notificacion se autodestruye a los 2500 ms
+                self.assertIn((2500, notif.destroy), juego.root.afters)
 
         # Simple/doble no dan premio (solo triple)
         for filas in (1, 2):
