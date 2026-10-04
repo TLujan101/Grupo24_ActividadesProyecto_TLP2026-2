@@ -13,7 +13,6 @@
 #   - color_celda_grid(x, y): (opcional) color de una celda fija.
 
 import sys
-# Tkinter es la libreria GUI estandar de Python, compatible con 2.7
 import Tkinter as tk
 
 from . import tracker
@@ -38,7 +37,6 @@ class Game(object):
         # --- Configuracion de la GUI ---
         self.root = tk.Tk()
         self.root.title("BrickScript - " + self.tipo_juego)
-        # Configurar la accion al cerrar la ventana ('X' de la barra de titulo)
         self.root.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
 
         self.taman_celda = 25 # Pixeles por celda
@@ -56,14 +54,11 @@ class Game(object):
         self.label_score = tk.Label(self.marco_score, text="PUNTUACION\n0", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 16, 'bold'))
         self.label_score.pack(pady=40, padx=10)
 
-        # Nota: Se ha eliminado 'Q: Salir' de los controles en pantalla
         self.label_controles = tk.Label(self.marco_score, text="CONTROLES\nFlechas: Mover/Rotar", bg='#1e1e2e', fg='#03a80b', font=('Consolas', 10))
         self.label_controles.pack(pady=20, padx=10)
 
-        # Boton de silencio. El color dice el estado: verde suena, gris no.
-        # Solo se muestra si el .brick declara audio: si no hay ninguna
-        # cancion ni efecto, el motor no puede hacer sonar nada y el boton
-        # solo ocuparia espacio.
+        # Boton de silencio (verde suena, gris no). Solo si el .brick
+        # declara audio: si no, solo ocuparia espacio.
         self.audio = self.crear_audio()
         if self.tiene_audio():
             self.btn_sonido = tk.Button(self.marco_score, text="Audio: ON",
@@ -72,23 +67,21 @@ class Game(object):
                                         bg='#2a2a3e', fg='#03a80b')
             self.btn_sonido.pack(pady=10, padx=10)
 
-        # Configurar eventos de teclado. Usamos <Key> para capturar cualquier tecla
         self.root.bind('<Key>', self.manejar_input_gui)
 
-        # Estado propio de cada juego (definido por la clase hija)
         self.inicializar_estado()
 
         self._game_over_emitido = False
         self.timer_gravedad = 0
         self.ejecutar_evento('ON_START')
-        self.timer_id = None # Para controlar el loop de Tkinter
+        self.timer_id = None
 
 
     # METODOS QUE CADA JUEGO DEBE SOBREESCRIBIR
     # -----------------------------------------
 
     def inicializar_estado(self):
-        # Debe crear las variables propias del juego y self.velocidad_gravedad
+        # Variables propias del juego y self.velocidad_gravedad.
         raise NotImplementedError("El juego debe implementar inicializar_estado()")
 
     def ejecutar_accion(self, verbo, objeto, accion):
@@ -96,28 +89,23 @@ class Game(object):
         raise NotImplementedError("El juego debe implementar ejecutar_accion()")
 
     def dibujar_elementos(self):
-        # Dibuja las piezas/jugadores que se mueven sobre la cuadricula
+        # Piezas/jugadores sobre la cuadricula.
         raise NotImplementedError("El juego debe implementar dibujar_elementos()")
 
     def color_celda_grid(self, x, y):
-        # Color de una celda fija de la cuadricula. Se puede sobreescribir.
+        # Sobreescribible.
         return COLOR_GRID_FIJA
 
 
-    # AUDIO
+    # AUDIO (opcional: sin SONG ni EFFECT el juego arranca en silencio)
     # -----
-    #
-    # El audio es opcional: un .brick sin SONG ni EFFECT arranca en silencio.
-    # Las acciones PLAY_MUSIC / PLAY_EFFECT / STOP_MUSIC llegan hasta aqui
-    # desde ejecutar_evento().
 
     def tiene_audio(self):
-        # El audio del .brick son los bloques DEFINE SONG y DEFINE EFFECT.
+        # SONG o EFFECT declarados en el .brick.
         return bool(self.datos_juego.get('songs') or self.datos_juego.get('effects'))
 
     def crear_audio(self):
-        # Punto unico de creacion del gestor. Los tests sobreescriben este
-        # metodo para no abrir canales de sonido de verdad.
+        # Los tests lo sobreescriben para no abrir sonido real.
         return GestorAudioNativo()
 
     def toggle_audio(self):
@@ -135,8 +123,7 @@ class Game(object):
         notas = canciones[nombre].get('notas', [])
         firma = tracker.firma_partitura(notas)
 
-        # Idempotente: ON_START se re-dispara en cada pieza fijada, y sin
-        # este chequeo la musica se reiniciaria cada vez.
+        # Idempotente: ON_START se re-dispara al fijar cada pieza.
         if firma == self.audio.musica_actual and self.audio.reproduciendo_musica:
             return
 
@@ -161,22 +148,19 @@ class Game(object):
     # --------------
 
     def run(self):
-        # Inicia el ciclo principal de juego de Tkinter
         self.root.after(50, self.game_loop)
         self.root.mainloop()
 
     def game_loop(self):
         if self.juego_terminado:
-            # GAME_OVER se emite una sola vez: el .brick puede usarlo para
-            # cortar la musica o tocar un jingle de fin de partida.
+            # ON_GAME_OVER se emite una sola vez.
             if not self._game_over_emitido:
                 self._game_over_emitido = True
                 self.ejecutar_evento('ON_GAME_OVER')
             self.mostrar_game_over()
             return
 
-        # Logica de TICK/Gravedad
-        # El loop se ejecuta cada 50ms (0.05 segundos)
+        # Gravedad: el loop corre cada 50ms.
         self.timer_gravedad += 0.05
         if self.timer_gravedad >= self.velocidad_gravedad:
             self.timer_gravedad = 0
@@ -184,16 +168,12 @@ class Game(object):
 
         self.dibujar()
 
-        # Programa el siguiente ciclo de juego
         self.timer_id = self.root.after(50, self.game_loop)
 
     def cerrar_ventana(self):
-        # Detiene el loop de juego de forma segura
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
-        # Antes de destruir la ventana hay que soltar el audio: en Linux
-        # queda un proceso hijo reproduciendo y en Windows un scratch en
-        # disco. Sin esto, cerrar el juego deja sonido sonando.
+        # Suelta el audio antes de destruir: si no, queda sonido sonando.
         try:
             self.audio.detener_todo()
         except Exception:
@@ -207,15 +187,10 @@ class Game(object):
 
     def manejar_input_gui(self, event):
         key = event.keysym.upper()
-
-        # La opcion de salir con 'Q' ha sido eliminada.
-
         self.manejar_tecla(key)
 
     def manejar_tecla(self, key):
-        # Las flechas disparan el evento ON_KEY_* del .brick; el juego
-        # concreto decide que hace cada accion en ejecutar_accion().
-        # Un juego que necesite otras teclas puede sobreescribir este metodo.
+        # Las flechas disparan ON_KEY_*; cada juego decide la accion.
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
 
@@ -245,7 +220,7 @@ class Game(object):
 
     def dibujar(self):
         self.frame += 1
-        self.canvas.delete("all") # Borrar todo en cada frame
+        self.canvas.delete("all")
         self.label_score.config(text="PUNTUACION\n" + str(self.puntuacion))
 
         # 1. Dibujar la cuadricula estatica (grid base)
@@ -258,9 +233,8 @@ class Game(object):
         self.dibujar_elementos()
 
     def dibujar_celda(self, x, y, color):
-        ts = self.taman_celda # Alias para taman de celda
-        x1, y1 = x * ts, y * ts
-        x2, y2 = x1 + ts, y1 + ts
+        x1, y1 = x * self.taman_celda, y * self.taman_celda
+        x2, y2 = x1 + self.taman_celda, y1 + self.taman_celda
         self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline='#000000')
 
 
@@ -268,7 +242,6 @@ class Game(object):
     # -----------------------------------
 
     def mostrar_game_over(self):
-        # Crear ventana emergente estilizada con Toplevel
         top = tk.Toplevel(self.root)
         top.title("Game Over")
         top.geometry("320x200")
@@ -306,9 +279,7 @@ class Game(object):
             bd=0,
             padx=20,
             pady=5,
-            # Reutiliza cerrar_ventana: esta via de salida tambien tiene que
-            # soltar el audio, y antes se lo saltaba (root.destroy + sys.exit
-            # a pelo), dejando los procesos de sonido sonando.
+            # Misma salida que la X: tambien suelta el audio.
             command=self.cerrar_ventana
         )
         btn_salir.pack(pady=20)

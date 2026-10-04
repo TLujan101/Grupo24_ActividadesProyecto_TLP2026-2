@@ -1,31 +1,10 @@
 # -*- coding: utf-8 -*-
-# audio.py --- Reproduccion del audio sintetizado en engine/tracker.py.
-#
-# Recibe PCM crudo (no rutas) y lo manda a los parlantes. Musica de fondo
-# y efectos van en canales separados, de modo que un efecto nunca corta la
-# musica.
-#
-# DOS FORMAS DE REPRODUCIR, y la razon de la diferencia:
-#
-#   Linux  -> se le pasa el PCM por la tuberia de entrada estandar. No se
-#             toca el disco en ningun momento. Es lo natural: paplay y
-#             aplay leen audio crudo de stdin.
-#   Windows-> MCI (winmm.dll) solo sabe abrir RUTAS de archivo, no memoria.
-#             No hay forma de reproducir un buffer en RAM con esta API,
-#             asi que ahi si se escribe un .wav temporal. Se escribe en una
-#             carpeta propia que se borra al cerrar el juego, y el archivo de
-#             musica es uno solo que se reescribe al cambiar de tema, de
-#             modo que nunca queda basura acumulada.
-#
-# pw-play queda fuera a proposito: solo reproduce archivos, no acepta stdin.
-#
-# CONCURRENCIA (Windows, donde MCI obliga a nombrar canales):
-#   Los efectos comparten un pool de 8 alias MCI. Como el archivo y el alias
-#   se reservan juntos en _efecto_nuevo(), dos efectos simultaneos nunca caen
-#   en el mismo alias y el 'close' de uno no le corta el sonido al otro.
-#   Para la musica hay un contador de generacion: cada vez que se pide una
-#   cancion sube, y _sigo_vivo() hace que el hilo de la cancion anterior se
-#   retire aunque 'reproduciendo_musica' vuelva a estar en True.
+# audio.py --- Reproduce el PCM de engine/tracker.py (solo stdlib).
+# Musica y efectos van por separado: un efecto nunca corta la musica.
+# Linux: PCM por stdin (paplay/aplay). Windows: MCI solo abre rutas, asi que
+# se usa un .wav temporal que se borra al cerrar (pw-play no sirve: no lee
+# stdin). Efectos en pool de 8 alias MCI y contador de generacion para que
+# sonidos simultaneos no se corten entre si.
 
 import os
 import sys
@@ -49,25 +28,15 @@ if IS_WIN:
 else:
     _mci = None
 
-# Formato que describe el PCM de engine/tracker.py: mono 16 bits little-endian.
-# OJO con paplay: --raw es una bandera SIN valor, el formato va aparte en
-# --format=. Escribir '--raw=s16le' hace que pacat >= 15 salga al instante con
-# "option '--raw' doesn't allow an argument", el pipe se rompe y el juego
-# suena mudo sin avisar.
+# PCM mono 16 bits little-endian. OJO paplay: --raw es bandera SIN valor
+# (el formato va en --format=); '--raw=s16le' rompe el pipe en silencio.
 FORMATO_PCM = {'paplay': ['--raw', '--format=s16le', '--rate=%d' % tracker.FPS, '--channels=1'],
                'aplay':  ['-f', 'S16_LE', '-r', str(tracker.FPS), '-c', '1', '-t', 'raw']}
 
 
 def _detectar_reproductor_linux():
-    # Devuelve (comando, flags) del primer reproductor que este INSTALADO y de
-    # verdad ACEPTE estos flags. Solo con 'which' no alcanza: un reproductor
-    # puede estar presente y rechazar el formato, y entonces el juego suena
-    # mudo sin explicar nada (pasaba con 'paplay --raw=s16le').
-    #
-    # El sondeo le manda entrada VACIA: no emite audio (nada que clickear) pero
-    # obliga al proceso a parsear los flags y conectar con el destino. Codigo 0
-    # y stderr vacio = sirve. Asi, si paplay falla, se prueba aplay en vez de
-    # rendirse en silencio.
+    # Prueba con entrada vacia: obliga a parsear flags sin sonar. Solo
+    # 'which' no basta: instalado no significa que acepte el formato.
     for cmd in ('paplay', 'aplay'):
         flags = FORMATO_PCM[cmd]
         try:
@@ -136,9 +105,8 @@ class GestorAudioNativo(object):
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def _inyectar(self, proc, pcm):
-        """Vuelca el PCM en stdin. Aqui si se bloquea, a proposito: el pipe
-        aplica contrapresion, asi que el reproductor marca el ritmo real y la
-        cancion no adelanta. Bloquear dura lo que dura la cancion."""
+        """Vuelca el PCM en stdin; bloquea lo que dura la cancion (la
+        contrapresion del pipe marca el ritmo real)."""
         try:
             proc.stdin.write(pcm)
             proc.stdin.close()
@@ -146,12 +114,8 @@ class GestorAudioNativo(object):
             pass
 
     def _lanzar_linux(self, pcm, es_musica):
-        """Abre el reproductor, REGISTRA el hijo y despues inyecta el PCM.
-
-        El orden importa: registrar despues de inyectar dejaba al proceso
-        invisible durante toda la cancion (inyectar bloquea), y entonces ni
-        el boton de silencio ni el cierre tenian a que matar.
-        """
+        """Registra el hijo ANTES de inyectar: si no, es invisible mientras
+        bloquea y no hay nada que matar al silenciar o cerrar."""
         if not self.reproductor[0]:
             return None
         try:
@@ -166,7 +130,7 @@ class GestorAudioNativo(object):
         return proc
 
     def _olvidar(self, proc):
-        # Saca un hijo del registro cuando ya termino (asi no crece sin fin).
+        # Saca hijos terminados del registro.
         with self._lock:
             self._procs_vivos.discard(proc)
             if self._proc_musica is proc:
@@ -181,15 +145,9 @@ class GestorAudioNativo(object):
             pass
 
     def _efecto_nuevo(self):
-        """Reserva un slot de efecto. Devuelve (archivo, alias) del MISMO numero.
-
-        Antes el archivo se nombraba con un contador y el alias MCI se
-        calculaba RE-LEYENDO ese contador despues, en otra seccion critica. Con
-        efectos simultaneos los dos se desincronizaban: sfx_2.wav y sfx_10.wav
-        acababan con el alias sfx_2, y el 'close sfx_2' del segundo cortaba el
-        sonido del primero a media vuelta. Ahora salen del mismo numero, asi
-        que un archivo y su alias siempre van juntos.
-        """
+        """Reserva archivo y alias del MISMO numero: antes salian de
+        contadores separados y dos efectos simultaneos podian compartir
+        alias y cortarse entre si."""
         with self._lock:
             self._sfx_id += 1
             numero = self._sfx_id
@@ -197,14 +155,9 @@ class GestorAudioNativo(object):
                 'sfx_%d' % (numero % 8))
 
     def _sigo_vivo(self, generacion):
-        """True si ESTE hilo sigue siendo el dueno de la musica.
-
-        'reproduciendo_musica' no alcanza: en un cambio de cancion o en un
-        un-mute vuelve a True ANTES de que el hilo anterior termine, y entonces
-        el viejo se cree vivo otra vez y los dos hilos mueven el mismo alias MCI
-        'bgm'. La generacion sube con cada cancion pedida, asi que el hilo viejo
-        se retira en cuanto hay una nueva.
-        """
+        """La bandera no alcanza: en un cambio de cancion vuelve a True antes
+        de que el hilo viejo termine. La generacion sube con cada cancion y
+        retira al anterior."""
         with self._lock:
             return (self.reproduciendo_musica
                     and not self.silenciado
@@ -214,8 +167,7 @@ class GestorAudioNativo(object):
     # ----------------
 
     def _loop_linux(self, pcm, generacion):
-        # Relanza el reproductor cada vez que termina la cancion. El pipe
-        # aplica contrapresion, asi que escribir el PCM ya marca el ritmo.
+        # Relanza el reproductor por cancion; el pipe ya marca el ritmo.
         while self._sigo_vivo(generacion):
             proc = self._lanzar_linux(pcm, es_musica=True)
             if proc is None:
@@ -251,11 +203,9 @@ class GestorAudioNativo(object):
             except Exception:
                 break
 
-        # Cierra SIEMPRE 'bgm'. Aunque otra cancion ya haya tomado el alias,
-        # este hilo es el unico que puede seguir con el archivo abierto, y
-        # mientras no cierre, el scratch no se puede reescribir en Windows
-        # (MCI lo bloquea en exclusiva). reproduce_musica_fondo() espera con
-        # join() a que este hilo termine antes de escribir de nuevo.
+        # Cierra 'bgm' siempre: con el alias abierto Windows bloquea el
+        # scratch y no se puede reescribir (reproduce_musica_fondo espera
+        # con join() a este hilo antes de escribir de nuevo).
         try:
             _mci('stop bgm', None, 0, 0)
             _mci('close bgm', None, 0, 0)
@@ -268,10 +218,9 @@ class GestorAudioNativo(object):
         if self.silenciado or not pcm or not self.disponible():
             return
 
-        # La generacion sube ANTES de tocar ninguna bandera: es lo que retira
-        # al hilo de la cancion anterior. Si se hiciera despues, ese hilo
-        # veria 'reproduciendo_musica' en True y creeria que sigue siendo el
-        # dueno del alias 'bgm'.
+        # La generacion sube ANTES de las banderas (retira al hilo anterior)
+        # y se espera su salida: en Windows el scratch es exclusivo y
+        # escribir encima da Permission denied.
         with self._lock:
             self._generacion += 1
             generacion = self._generacion
@@ -280,12 +229,6 @@ class GestorAudioNativo(object):
             self._firma_actual = firma
             self.reproduciendo_musica = True
 
-        # Y ahora se espera a que el hilo anterior se vaya. En Windows MCI
-        # abre el scratch en exclusiva, asi que escribir encima mientras el
-        # hilo viejo sigue con 'bgm' abierto da Permission denied: la cancion
-        # nueva se quedaba sin arrancar y el juego mudo sin explicar nada.
-        # Como la generacion ya cambio, ese hilo sale solo en cuanto vuelve a
-        # mirar la bandera.
         self._esperar_hilo_musica()
 
         if IS_LINUX:
@@ -294,10 +237,7 @@ class GestorAudioNativo(object):
             try:
                 self._escribir_wav(self._ruta_musica, pcm)
             except (IOError, OSError), e:
-                # Sin scratch no hay musica, pero no es motivo para tumbar el
-                # juego: se sigue jugando en silencio. Si no se dice nada, el
-                # silencio parece un fallo del .brick cuando en realidad es el
-                # archivo temporal.
+                # Sin scratch no hay musica, pero el juego sigue en silencio.
                 sys.stderr.write('[audio] no se pudo escribir el temporal de audio (%s); '
                                  'la musica queda en silencio\n' % e)
                 with self._lock:
@@ -335,8 +275,7 @@ class GestorAudioNativo(object):
             except Exception:
                 pass
         else:
-            # Sin esto el proceso hijo queda huerfano sonando hasta que
-            # termina su cancion, aunque el juego ya haya cerrado.
+            # Si no, el hijo queda huerfano sonando tras cerrar.
             with self._lock:
                 proc, self._proc_musica = self._proc_musica, None
             self._matar(proc)
@@ -364,8 +303,6 @@ class GestorAudioNativo(object):
             return
 
         if IS_WIN and _mci and self._dir_temp:
-            # _efecto_nuevo() devuelve archivo y alias del MISMO numero, para
-            # que dos efectos simultaneos no acaben compartiendo alias MCI.
             ruta, alias = self._efecto_nuevo()
             try:
                 self._escribir_wav(ruta, pcm)
@@ -379,8 +316,7 @@ class GestorAudioNativo(object):
                     _mci('close %s' % alias, None, 0, 0)
                     _mci('open "%s" alias %s' % (ruta_win, alias), None, 0, 0)
                     _mci('play %s from 0' % alias, None, 0, 0)
-                    # Se espera a que MCI termine de leer el archivo: solo
-                    # entonces se puede cerrar el alias y borrarlo.
+                    # Solo se borra cuando MCI suelta el archivo.
                     while True:
                         time.sleep(0.02)
                         _mci('status %s mode' % alias, buf, 64, 0)
@@ -408,10 +344,7 @@ class GestorAudioNativo(object):
             self.detener_musica()
             tracker.limpiar_cache()
         else:
-            # Retomar. Antes solo se ponia musica_actual=None y se esperaba a
-            # que el .brick pidiera la cancion otra vez, pero ON_START no
-            # vuelve a dispararse: pulsar "Audio: ON" no hacia sonar nada.
-            # _pcm_actual sigue teniendo los bytes, asi que se relanza directo.
+            # ON_START no se repite: se relanza con los bytes guardados.
             self.musica_actual = None
             if self._pcm_actual:
                 self.reproducir_musica_fondo(self._pcm_actual, self._firma_actual)
@@ -420,9 +353,7 @@ class GestorAudioNativo(object):
     def detener_todo(self):
         """Libera todo. Se llama antes de destruir la ventana."""
         self.detener_musica()
-        # Los efectos de sonido son procesos sueltos, sin relacion con la
-        # musica, y antes no se guardaban en ningun sitio: al cerrar el
-        # juego seguian sonando solos.
+        # Los efectos son procesos sueltos: antes seguian sonando tras cerrar.
         with self._lock:
             pendientes = list(self._procs_vivos)
             self._procs_vivos.clear()
