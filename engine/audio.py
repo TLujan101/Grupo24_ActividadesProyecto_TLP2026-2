@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# audio.py --- Reproduccion del audio sintetizado en tracker.py.
+# audio.py --- Reproduccion del audio sintetizado en engine/tracker.py.
 #
 # Recibe PCM crudo (no rutas) y lo manda a los parlantes. Musica de fondo
 # y efectos van en canales separados, de modo que un efecto nunca corta la
@@ -35,7 +35,7 @@ import tempfile
 import threading
 import subprocess
 
-import tracker
+from . import tracker
 
 IS_WIN = sys.platform.startswith('win')
 IS_LINUX = sys.platform.startswith('linux')
@@ -49,7 +49,7 @@ if IS_WIN:
 else:
     _mci = None
 
-# Formato que describe el PCM de tracker.py: mono 16 bits little-endian.
+# Formato que describe el PCM de engine/tracker.py: mono 16 bits little-endian.
 # OJO con paplay: --raw es una bandera SIN valor, el formato va aparte en
 # --format=. Escribir '--raw=s16le' hace que pacat >= 15 salga al instante con
 # "option '--raw' doesn't allow an argument", el pipe se rompe y el juego

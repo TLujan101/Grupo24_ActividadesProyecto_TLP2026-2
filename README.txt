@@ -59,12 +59,16 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
 --- SINTAXIS PARA TETRIS ---
 
 Eventos disponibles: ON START, ON TICK, ON LINE_CLEAR, ON KEY_UP, ON KEY_DOWN, ON KEY_LEFT, ON KEY_RIGHT
+En variantes extendidas (ej. tetris_reborn.brick con ON ROTATE, ON EXPLOSION,
+ON GAME_OVER): el motor además dispara ON_PIECE_LAND al fijarse cada pieza,
+por lo que cualquier .brick puede definirlo aunque reborn no lo use.
 
 Acciones comunes:
 * SPAWN RANDOM_SHAPE
 * MOVE CURRENT_PIEZA [LEFT | RIGHT | DOWN]
 * ROTATE CURRENT_PIEZA
 * INCREASE_SCORE [PUNTOS]
+* En variantes extendidas: PLAY_MUSIC [TEMA], PLAY_EFFECT [EFECTO], STOP_MUSIC
 
 --- SINTAXIS PARA SNAKE ---
 

@@ -16,8 +16,8 @@ import sys
 # Tkinter es la libreria GUI estandar de Python, compatible con 2.7
 import Tkinter as tk
 
-import tracker
-from audio import GestorAudioNativo
+from . import tracker
+from .audio import GestorAudioNativo
 
 COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas
 

@@ -17,9 +17,9 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 ├── jugar.sh         Compila y juega (Linux)
 ├── games/           Código BrickScript (.brick) de cada juego y sus variantes
 ├── engine/          Lógica en Python de cada tipo de juego (Tetris, Snake, ...)
+│                   más apoyos internos (audio, tracker, utilidades)
 ├── grammars/        Gramáticas BNF del lenguaje
 ├── docs/            Documentación y registro de cambios
-├── songs/           Música
 ├── tests/           Tests automáticos
 ├── .githooks/       Hook de pre-commit (corre los tests)
 ├── INSTALL.txt      Requisitos e instalación

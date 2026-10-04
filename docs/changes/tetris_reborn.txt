@@ -52,6 +52,33 @@ DEFINE SHAPE Z_PIECE COLOR RED CHANCE 10:
     [1, 0, 0]
 END
 
+>>>>>> Se declara nueva forma posible con sus 4 estados ("J"):
+
+DEFINE SHAPE J_PIECE COLOR BLUE CHANCE 10:
+  STATE 1:
+    [0, 1, 0]
+    [0, 1, 0]
+    [1, 1, 0]
+  STATE 2:
+    [1, 0, 0]
+    [1, 1, 1]
+    [0, 0, 0]
+  STATE 3:
+    [0, 1, 1]
+    [0, 1, 0]
+    [0, 1, 0]
+  STATE 4:
+    [0, 0, 0]
+    [1, 1, 1]
+    [0, 0, 1]
+END
+
+>>>>>> Piezas existentes (I, L, T): mantienen sus matrices y ganan COLOR y
+CHANCE (I=CYAN, L=ORANGE, T=PURPLE, todas CHANCE 10). Los estados de
+rotación de L_PIECE se reordenaron a un ciclo coherente (vertical con pie
+abajo-derecha -> horizontal con pie abajo-izquierda -> vertical con pie
+arriba-izquierda -> horizontal con pie arriba-derecha).
+
 ------------------------------ NUEVAS FORMAS ESPECIALES IMPLEMENTADAS (POWER-UPS) ------------------------------
 
 >>>>>> Se declara nueva forma especial de nombre POWERUP:
@@ -99,39 +126,41 @@ END
 
 ---------------------------------- NUEVAS LÓGICAS DE JUEGO -----------------------------------------
 
->>>>>> Se agrega lógica para el power-up "Bomba" en el archivo tetris_reborn.brick:
+>>>>>> Condición de aparición de Power-Ups en engine/tetris.py (tetris_limpiar_lineas, lineas 224-249):
 
-ON PIECE_LAND:
-    IF CURRENT_PIECE IS POWERUP:
-        EXPLODE_RADIUS 1
-        SPAWN RANDOM_SHAPE
-    END
-END
+Solo un triple (3 o más líneas simultáneas) deja un Power-Up pendiente para el
+siguiente SPAWN. Simple/doble solo dan puntaje. Hay un sorteo con 20% de
+probabilidad de que no aparezca nada aun cumpliendo la condición:
 
->>>>>> Se implementó un sistema de elección aleatoria de Power-Up cuando la condición de aparición de este sea satisfecha.
-Hay una probabilidad de que no aparezca ningún Power-Up incluso con la condición de aparición satisfecha (runtime.py line 412-427):
+if lineas_limpias >= 3:
+    eleccion = random.random()
+    if eleccion < 0.25:
+        candidato = 'POWERUP'
+    elif eleccion < 0.45:
+        candidato = 'CLEAR_LINE_PIECE'
+    elif eleccion < 0.65:
+        candidato = 'SUPERBOMBA'
+    elif eleccion < 0.80:
+        candidato = "CLEAR_THREE_PIECE"
+    else:
+        candidato = None
+    # Solo vale si el .brick define esa forma; si no, no hay premio
+    # (así tetris.brick original nunca rompe el spawn).
+    if candidato in self.datos_juego['shapes']:
+        self.siguiente_powerup = candidato
+        self.mostrar_notificacion_powerup(self.siguiente_powerup)
 
-if lineas_limpias >= 1:
-            eleccion = random.random()
-            if eleccion < 0.25:
-                self.siguiente_powerup = 'POWERUP'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.25 and eleccion < 0.45:
-                self.siguiente_powerup = 'CLEAR_LINE_PIECE'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.45 and eleccion < 0.65:
-                self.siguiente_powerup = 'SUPERBOMBA'
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            elif eleccion > 0.65 and eleccion < 0.80:
-                self.siguiente_powerup = "CLEAR_THREE_PIECE"
-                self.mostrar_notificacion_powerup(self.siguiente_powerup)
-            else:
-                self.siguiente_powerup = None
+>>>>>> Efectos de cada Power-Up en engine/tetris.py (tetris_fijar_pieza, lineas 132-211):
 
+Cada forma especial se detecta por nombre al fijarse y aplica su efecto en vez
+de pintar celdas normales: POWERUP borra radio 3x3 (+150 pts, dispara
+ON_EXPLOSION), SUPERBOMBA borra radio 5x5 (+350 pts, dispara ON_EXPLOSION),
+CLEAR_LINE_PIECE vacía las filas ocupadas (+200 por fila) y CLEAR_THREE_PIECE
+vacía las columnas ocupadas (+250 por columna).
 
->>>>>> Se añaden a runtime.py las funciones especiales (radio de explosión y limpiar filas/columnas) de cada uno de los Power-Up (runtime.py line 309-388):
+>>>>>> Probabilidad ponderada por CHANCE en engine/utilidades.py (lineas 21-32):
 
->>>>>> Se añade el cálculo de Probabilidad Ponderada haciendo uso de la librería Bisect (runtime.py line 29-40):
+Se usa solo stdlib (random + bisect, válido en Python 2.7, sin numpy):
 
 def eleccion_ponderada(items, pesos):
     if len(items) != len(pesos):
@@ -145,6 +174,11 @@ def eleccion_ponderada(items, pesos):
         raise ValueError("Los pesos deben sumar > 0")
     tiro = random.randint(1, s)
     return items[bisect.bisect_left(acum, tiro)]
+
+El pool se arma en engine/tetris.py (inicializar_estado, lineas 16-34):
+cada SHAPE aporta su CHANCE (10 por defecto si el JSON es viejo) y POWERUP se
+excluye del sorteo normal. El color se resuelve en tetris_spawn_pieza
+(lineas 87-109) leyendo el JSON: Colores.get(Datos.get("color", "CYAN")).
 
 ------------------------------ CAMBIOS EN ARCHIVOS DE EJECUCION ------------------------------ 
 
@@ -165,7 +199,7 @@ goto :eof]
 
 ------------------------------ CAMBIOS DE COLORES, ESTÉTICA DEL PROGRAMA Y SUS COMPONENTES ------------------------------ 
 
->>>>>> Se añaden códigos de colores básicos en el archivo runtime.py y se añade la lista de colores "Arcoiris":
+>>>>>> Tabla de colores y paleta Arcoiris en engine/utilidades.py (lineas 7-19):
 
 Colores = {
     "CYAN": "#00FFFF",
@@ -181,13 +215,16 @@ Colores = {
 }
 Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
 
->>>>>> La estética de la ventana emergente en la que se ejecutan los juegos fue modificada (runtime.py line 479-520): 
-Se ha cambiado el color de fondo a uno más oscuro (#1e1e2e) y el color del texto a uno más brillante (#03a80b). 
+Antes el color estaba quemado ("#00FFFF"). Ahora engine/tetris.py
+(tetris_spawn_pieza, lineas 96-105) lo lee del JSON y dibujar_elementos
+(lineas 41-52) anima las piezas RAINBOW rotando la paleta con frame // 6.
 
------------------------------- UTILIDADES ------------------------------ 
+>>>>>> Estética de la ventana en engine/game.py (lineas 49-60):
+Se ha cambiado el color de fondo a uno más oscuro (#1e1e2e) y el color del texto a uno más brillante (#03a80b).
 
->>>>>> Se añadió una función que facilita la identificación de cada Power-Up al mostrar una notificación que indica el nombre del 
-Power-Up que apareció al aparecer este en la zona de juego (runtime.py):
+------------------------------ UTILIDADES ------------------------------
+
+>>>>>> Notificación de Power-Up en engine/tetris.py (mostrar_notificacion_powerup, lineas 58-85):
 
 def mostrar_notificacion_powerup(self, nombre_powerup):
         if nombre_powerup == "SUPERBOMBA":

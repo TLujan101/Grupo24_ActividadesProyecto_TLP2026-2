@@ -1,13 +1,18 @@
-Cambios en runtime.py (Actividad 3, primera entrega)
+Cambios en el motor (Actividad 3, primera entrega)
+NOTA: tras el refactor, runtime.py es solo el loader (lee el .json y llama a
+engine.crear_juego). La lógica que antes era monolítica vive ahora en
+engine/game.py (base), engine/tetris.py (Tetris) y engine/utilidades.py
+(colores + sorteo ponderado).
 
 
-1. Tabla de colores (nueva)
+1. Tabla de colores (nueva, en engine/utilidades.py lineas 7-19)
 
-Antes el color de la pieza estaba quemado en dibujar():
+Antes el color de la pieza estaba quemado al dibujar:
 
->   COLOR_PIECE = '#00FFFF'
+>   self.pieza_color = "#00FFFF"
 
-Ahora hay una tabla y la pieza usa el COLOR que trae el JSON:
+Ahora hay una tabla y la pieza usa el COLOR que trae el JSON
+(resuelto en engine/tetris.py, tetris_spawn_pieza, lineas 96-105):
 
 Colores = {
     "CYAN": "#00FFFF",
@@ -20,22 +25,19 @@ Colores = {
     "WHITE": "#FFFFFF",
     "BLACK": "#000000",
     "RAINBOW": "#FFFFFF",
-    "DARK_GRAY": '#343434',
-    "BRIGHT_GREEN": '#00FF00',
-    "NORMAL_GREEN": '#33CC33',
 }
 
 Arcoiris = ["#FF0000","#FF7F00","#FFFF00","#00FF00","#0000FF","#AA00FF"]
 
 
-2. Sorteo ponderado por CHANCE (nuevo)
+2. Sorteo ponderado por CHANCE (nuevo, en engine/utilidades.py lineas 21-32)
 
 Antes el spawn era uniforme, todas las piezas salian con igual probabilidad:
 
 >   nombre_pieza = random.choice(self.datos_juego['shapes'].keys())
 
 Ahora la eleccion respeta el CHANCE de cada pieza.
-Se usa bisect (solo stdlib, sin numpy) y se agrega esta funcion auxiliar:
+Se usa bisect (solo stdlib, sin numpy) con esta funcion auxiliar:
 
 import bisect
 
@@ -53,24 +55,18 @@ def eleccion_ponderada(items, pesos):
     return items[bisect.bisect_left(acum, tiro)]
 
 
-3. Acumulados precalculados en __init__ (nuevo)
+3. Pool de piezas en inicializar_estado (nuevo, en engine/tetris.py lineas 16-34)
 
-Los acumulados se calculan una sola vez al crear el juego,
-asi cada spawn cuesta O(log n): solo un tiro + bisect.
+El pool se arma una sola vez al crear el juego: dos listas paralelas
+(_nombres_piezas, _pesos_piezas) con el CHANCE de cada SHAPE.
 
 POWERUP se excluye del sorteo normal.
-Solo sale como premio garantizado (ver punto 6).
+Solo sale como premio (ver punto 6).
 
 Si un shape viene en formato viejo (lista, sin diccionario)
 se usa chance 10 por defecto.
 Asi tetris.brick original sigue funcionando sin cambios:
 
-self.pieza_color = "#00FFFF"
-self.powerup_pendiente = False
-self._nombres_piezas = []
-self._pesos_piezas = []
-self._acum_chances = []
-SumaChances = 0
 for NombrePool in self.datos_juego['shapes'].keys():
     if NombrePool == 'POWERUP':
         continue
@@ -81,83 +77,81 @@ for NombrePool in self.datos_juego['shapes'].keys():
         PesoPool = 10
     self._nombres_piezas.append(NombrePool)
     self._pesos_piezas.append(PesoPool)
-    SumaChances += PesoPool
-    self._acum_chances.append(SumaChances)
 
 
-4. Spawn con color del JSON (modificado)
+4. Spawn con color del JSON (modificado, en engine/tetris.py lineas 87-109)
 
-tetris_spawn_pieza: si hay powerup pendiente se sirve POWERUP,
+tetris_spawn_pieza: si hay powerup pendiente se sirve esa pieza,
 si no se hace el tiro ponderado.
 El color se lee del JSON, ya no es fijo:
 
-if self.powerup_pendiente and 'POWERUP' in self.datos_juego['shapes']:
-    nombre_pieza = 'POWERUP'
-    self.powerup_pendiente = False
+if self.siguiente_powerup:
+    nombre_pieza = self.siguiente_powerup
+    self.siguiente_powerup = None
 else:
-    tiro = random.randint(1, self._suma_chances)
-    idx = bisect.bisect_left(self._acum_chances, tiro)
-    nombre_pieza = self._nombres_piezas[idx]
+    nombre_pieza = eleccion_ponderada(self._nombres_piezas, self._pesos_piezas)
 
 Datos = self.datos_juego['shapes'][nombre_pieza]
 if isinstance(Datos, dict):
     self.pieza_actual = Datos["estados"]
-    self.pieza_color = Colores.get(Datos.get("color","CYAN"), "#00FFFF")
+    self.pieza_color = Colores.get(Datos.get("color", "CYAN"), "#00FFFF")
+    self.pieza_es_arcoiris = (Datos.get("color", "CYAN") == "RAINBOW")
 else:
     self.pieza_actual = Datos
     self.pieza_color = "#00FFFF"
+    self.pieza_es_arcoiris = False
 
 
-5. Celdas arcoiris al fijar la pieza (nuevo)
+5. Efectos de Power-Up al fijar la pieza (nuevo, en engine/tetris.py lineas 132-211)
 
-tetris_fijar_pieza: las celdas de una pieza RAINBOW se marcan
-en rainbow_grid para que el bonus sepa donde cayeron:
+tetris_fijar_pieza detecta la pieza por nombre y aplica su efecto en vez de
+pintar celdas normales:
+- POWERUP: borra radio 3x3 alrededor (+150 pts, dispara ON_EXPLOSION).
+- SUPERBOMBA: borra radio 5x5 (+350 pts, dispara ON_EXPLOSION).
+- CLEAR_LINE_PIECE: vacia las filas ocupadas (+200 por fila).
+- CLEAR_THREE_PIECE: vacia las columnas ocupadas (+250 por columna).
+Toda pieza fijada dispara ON_PIECE_LAND y luego ON_START (siguiente spawn).
 
-if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
-    self.rainbow_grid[self.pieza_y + y_offset][self.pieza_x + x_offset] = True
 
-
-6. Bonus arcoiris + premio al limpiar lineas (modificado)
+6. Premio al limpiar lineas (modificado, en engine/tetris.py lineas 224-249)
 
 tetris_limpiar_lineas: antes solo disparaba ON_LINE_CLEAR por linea.
-Ahora cuenta las celdas arcoiris dentro de las lineas llenas
-y dispara ON_RAINBOW_LINE_CLEAR una vez por cada una
-(200 puntos segun tetris_reborn.brick).
-Ademas deja un powerup pendiente para el proximo spawn.
+Ahora, si son 3 o mas simultaneas (triple), sortea un Power-Up para el
+proximo spawn (con 20% de probabilidad de nada):
 
-OJO testing: el umbral quedo en >= 1 linea.
-Para la entrega hay que volverlo a >= 3 (triple):
+if lineas_limpias >= 3:
+    eleccion = random.random()
+    if eleccion < 0.25:
+        candidato = 'POWERUP'
+    elif eleccion < 0.45:
+        candidato = 'CLEAR_LINE_PIECE'
+    elif eleccion < 0.65:
+        candidato = 'SUPERBOMBA'
+    elif eleccion < 0.80:
+        candidato = "CLEAR_THREE_PIECE"
+    else:
+        candidato = None
+    # Solo vale si el .brick define esa forma; si no, no hay premio
+    # (asi el clasico nunca rompe el spawn con KeyError).
+    if candidato in self.datos_juego['shapes']:
+        self.siguiente_powerup = candidato
+        self.mostrar_notificacion_powerup(self.siguiente_powerup)
 
-Llenas = [i for i, fila in enumerate(self.grid) if all(fila)]
-lineas_limpias = len(Llenas)
-if lineas_limpias == 0:
-    return
-Bonus = sum(1 for i in Llenas for x in range(self.ancho) if self.rainbow_grid[i][x])
-for _ in range(lineas_limpias): self.ejecutar_evento('ON_LINE_CLEAR')
-for _ in range(Bonus): self.ejecutar_evento('ON_RAINBOW_LINE_CLEAR')
-if lineas_limpias >= 1:
-    self.powerup_pendiente = True
 
+7. Animacion arcoiris al dibujar (modificado, en engine/tetris.py lineas 41-52)
 
-7. Animacion arcoiris al dibujar (modificado)
+La pieza actual con color RAINBOW anima rotando la paleta Arcoiris con el
+contador de frames (frame // 6). Las celdas fijadas usan el gris oscuro
+de engine/game.py (COLOR_GRID_FIJA = '#343434'):
 
-Las celdas fijadas arcoiris y la pieza POWERUP animan
-rotando la paleta Arcoiris con el contador de frames (frame // 6).
-Las celdas normales usan DARK_GRAY como antes ('#343434'):
-
-self.frame += 1
-
-if self.rainbow_grid[y][x] == True:
-    color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
-else:
-    color = Colores.get("DARK_GRAY")
-
-if self.pieza_color == Colores.get("RAINBOW", "#FFFFFF"):
-    color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
+if celda == 1:
+    if getattr(self, 'pieza_es_arcoiris', False):
+        color = Arcoiris[(self.frame // 6) % len(Arcoiris)]
+    else:
+        color = self.pieza_color
+    self.dibujar_celda(self.pieza_x + x_offset, self.pieza_y + y_offset, color)
 
 
 8. Snake sin cambios de logica
 
-Solo se reemplazan sus constantes de color por el diccionario
-(RED, BRIGHT_GREEN, NORMAL_GREEN).
 La logica queda igual, por retrocompatibilidad.
