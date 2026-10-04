@@ -93,8 +93,15 @@ class Game(object):
         raise NotImplementedError("El juego debe implementar dibujar_elementos()")
 
     def color_celda_grid(self, x, y):
-        # Sobreescribible.
+        # Color de una celda fija. Sobreescribible.
         return COLOR_GRID_FIJA
+
+    def animacion_borrado_activa(self):
+        # Los juegos con borrado de filas (Tetris) lo sobreescriben.
+        return False
+
+    def avanzar_animacion_borrado(self):
+        return False
 
 
     # AUDIO (opcional: sin SONG ni EFFECT el juego arranca en silencio)
@@ -160,11 +167,17 @@ class Game(object):
             self.mostrar_game_over()
             return
 
-        # Gravedad: el loop corre cada 50ms.
-        self.timer_gravedad += 0.05
-        if self.timer_gravedad >= self.velocidad_gravedad:
-            self.timer_gravedad = 0
-            self.ejecutar_evento('ON_TICK')
+        # Animacion de borrado: el tablero queda congelado (sin gravedad) hasta
+        # que el juego confirme el borrado de las lineas.
+        if self.animacion_borrado_activa():
+            if self.avanzar_animacion_borrado():
+                return
+        else:
+            # Gravedad: el loop corre cada 50ms.
+            self.timer_gravedad += 0.05
+            if self.timer_gravedad >= self.velocidad_gravedad:
+                self.timer_gravedad = 0
+                self.ejecutar_evento('ON_TICK')
 
         self.dibujar()
 

@@ -1,20 +1,20 @@
 ---------------------------------------  CAMBIOS CON RESPECTO A TETRIS.BRICK ---------------------------------------
 
 RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 3)
-- Mignite (motor y audio): piezas nuevas O/J/S/Z con COLOR/CHANCE, sorteo
+- Miguel Angel Echeverri Isaza (motor y audio): piezas nuevas O/J/S/Z con COLOR/CHANCE, sorteo
   ponderado con bisect (B-mecánica), power-ups y spawn tras triple-línea
   (C-mecánica), audio sintetizado desde el .brick, scripts jugar.bat/sh,
   reorg engine/+docs/ y .bnf extendida (D).
-  
-- TLujan101 (toolchain y documento): .brick/.bnf iniciales y actualizados,
+
+- Tomas Lujan Colorado (toolchain y documento): .brick/.bnf iniciales y actualizados,
   ajustes a compiler.py/jugar.bat-sh/runtime.py, creación de este documento
   (E2-base) e integración de los PRs #1/#2/#3/#7 como filtro de calidad.
-  
-- Daniel (totoratsu) (arquitectura y calidad): paquete engine/ (Game/Tetris/
+
+- Nixon Daniel Lizcano Santana (arquitectura y calidad): paquete engine/ (Game/Tetris/
   Snake), simplificación del compilador, CI con tests en cada PR y hook
   pre-commit; su infraestructura es la que verifica la regla de oro (D).
-  
-- Andrés (diseño y balanceo): valores CHANCE y condición de aparición de
+
+- Andrés Felipe Bustamante López (diseño y balanceo): valores CHANCE y condición de aparición de
   power-ups (B-valores, C-condición), estados del .brick (comodín e I) y
   co-redacción de este changelog (E2).
 
@@ -179,8 +179,20 @@ por columnas, las celdas que quedan flotando caen por gravedad
 (tetris_aplicar_gravedad en el mismo archivo: compacta cada columna hacia
 abajo conservando el orden).
 
->>>>>> Probabilidad ponderada por CHANCE en engine/utilidades.py (lineas 21-32):
+>>>>>> Animación de borrado de líneas (engine/tetris.py + engine/game.py):
 
+Las filas que se van a limpiar ya no desaparecen de golpe: se marcan y
+parpadean en blanco/gris durante 6 frames (~300 ms) antes de borrarse. El
+borrado, el puntaje y el sorteo del power-up ocurren en el último frame.
+
+tetris_limpiar_lineas solo marca las filas; el borrado real lo hace el ciclo
+de juego, que Tetris expone con dos hooks (animacion_borrado_activa y
+avanzar_animacion_borrado) para no mezclar la lógica de Tetris con la de
+otros juegos. Mientras parpadea, la gravedad queda congelada y la pieza actual
+no se dibuja. La pieza siguiente la genera ON_START al fijarse la pieza (no al
+terminar la animación), así no aparece una pieza doble.
+
+>>>>>> Probabilidad ponderada por CHANCE en engine/utilidades.py (lineas 21-32):
 Se usa solo stdlib (random + bisect, válido en Python 2.7, sin numpy):
 
 def eleccion_ponderada(items, pesos):
@@ -201,10 +213,10 @@ cada SHAPE aporta su CHANCE (10 por defecto si el JSON es viejo) y POWERUP se
 excluye del sorteo normal. El color se resuelve en tetris_spawn_pieza
 (lineas 87-109) leyendo el JSON: Colores.get(Datos.get("color", "CYAN")).
 
------------------------------- CAMBIOS EN ARCHIVOS DE EJECUCION ------------------------------ 
+------------------------------ CAMBIOS EN ARCHIVOS DE EJECUCION ------------------------------
 
->>>>>> Se modifica el archivo jugar.bat para añadir un menú interactivo que enumera los juegos disponibles 
-y pide como valor de entrada un número correspondiente a uno de los juegos disponibles o directamente 
+>>>>>> Se modifica el archivo jugar.bat para añadir un menú interactivo que enumera los juegos disponibles
+y pide como valor de entrada un número correspondiente a uno de los juegos disponibles o directamente
 el nombre de alguno de los juegos para facilitar el manejo de los mismos:
 
 [:Pedir
@@ -218,7 +230,7 @@ set "Juego="
 set /p Juego="Selecciona un Numero o Nombre: "
 goto :eof]
 
------------------------------- CAMBIOS DE COLORES, ESTÉTICA DEL PROGRAMA Y SUS COMPONENTES ------------------------------ 
+------------------------------ CAMBIOS DE COLORES, ESTÉTICA DEL PROGRAMA Y SUS COMPONENTES ------------------------------
 
 >>>>>> Tabla de colores y paleta Arcoiris en engine/utilidades.py (lineas 7-19):
 

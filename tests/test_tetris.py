@@ -6,7 +6,7 @@ import unittest
 
 from tests.tk_falso import EventoFalso
 from engine.game import COLOR_GRID_FIJA
-from engine.tetris import Tetris
+from engine.tetris import Tetris, MAX_FRAMES_ANIMACION_LINEAS
 from engine.utilidades import Colores, Arcoiris
 
 PIEZA_O = [[[1, 1], [1, 1]]]
@@ -47,6 +47,12 @@ def poner_pieza(juego, nombre, x, y, rotacion=0):
     juego.pieza_nombre = nombre
     juego.pieza_actual = juego.datos_juego['shapes'][nombre]['estados']
     juego.pieza_x, juego.pieza_y, juego.pieza_rotacion = x, y, rotacion
+
+
+def terminar_animacion(juego):
+    # El borrado de filas es diferido (parpadeo): el loop lo completa.
+    for _ in range(MAX_FRAMES_ANIMACION_LINEAS):
+        juego.game_loop()
 
 
 class TestTetrisBase(unittest.TestCase):
@@ -160,7 +166,10 @@ class TestTetris(TestTetrisBase):
             juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.pieza_y, 4)
         juego.ejecutar_evento('ON_TICK')
-        # Se fija, completa la fila de abajo y la limpia
+        # Se fija, completa la fila de abajo y la limpia (tras el parpadeo)
+        self.assertEqual(juego.lineas_animandose, {5})
+        terminar_animacion(juego)
+        self.assertEqual(juego.lineas_animandose, set())
         self.assertEqual(juego.grid[4], [0] * 6)
         self.assertEqual(juego.grid[5], [0, 0, 1, 1, 0, 0])
         self.assertEqual(juego.puntuacion, 100)
@@ -225,8 +234,30 @@ class TestTetris(TestTetrisBase):
         juego.grid[4] = [1] * 6
         juego.grid[5] = [1] * 6
         juego.tetris_limpiar_lineas()
+        terminar_animacion(juego)
         self.assertEqual(juego.grid[5], [1, 0, 0, 0, 0, 0])
         self.assertEqual(juego.puntuacion, 2 * 100)   # 2 lineas
+
+    def test_animacion_de_borrado(self):
+        juego = Tetris(datos_tetris())
+        juego.grid[5] = [1] * 6
+        juego.tetris_limpiar_lineas()
+        # La fila marcada parpadea blanco/gris; el resto sigue gris fijo
+        self.assertEqual(juego.color_celda_grid(0, 5), '#FFFFFF')
+        self.assertEqual(juego.color_celda_grid(2, 3), COLOR_GRID_FIJA)
+        # La gravedad espera al borrado y la pieza no se dibuja
+        y_antes = juego.pieza_y
+        for _ in range(MAX_FRAMES_ANIMACION_LINEAS - 1):
+            juego.game_loop()
+            self.assertEqual(juego.pieza_y, y_antes, 'la gravedad espera')
+            self.assertEqual(juego.grid[5], [1] * 6, 'todavia no se borra')
+        self.assertEqual(juego.color_celda_grid(0, 5), '#555555')
+        self.assertEqual(juego.puntuacion, 0, 'el punto entra al borrar')
+        # El ultimo frame borra de verdad
+        juego.game_loop()
+        self.assertEqual(juego.lineas_animandose, set())
+        self.assertEqual(juego.grid[5], [0] * 6)
+        self.assertEqual(juego.puntuacion, 100)
 
     def test_sorteo_de_power_up(self):
         casos = [(0.1, 'POWERUP', 'Power Up:BOMBA'),
@@ -245,6 +276,7 @@ class TestTetris(TestTetrisBase):
             juego.grid[4] = [1] * 6
             juego.grid[5] = [1] * 6
             juego.tetris_limpiar_lineas()
+            terminar_animacion(juego)
             self.assertEqual(juego.siguiente_powerup, powerup, valor)
             if texto:
                 notif = juego.root.hijos[-1]
@@ -258,6 +290,7 @@ class TestTetris(TestTetrisBase):
             for i in range(filas):
                 juego.grid[5 - i] = [1] * 6
             juego.tetris_limpiar_lineas()
+            terminar_animacion(juego)
             self.assertEqual(juego.siguiente_powerup, None, filas)
 
         # La siguiente pieza es el power up sorteado
@@ -267,6 +300,7 @@ class TestTetris(TestTetrisBase):
         juego.grid[4] = [1] * 6
         juego.grid[5] = [1] * 6
         juego.tetris_limpiar_lineas()
+        terminar_animacion(juego)
         self.assertEqual(juego.siguiente_powerup, 'POWERUP')
         juego.tetris_spawn_pieza()
         self.assertEqual((juego.pieza_nombre, juego.siguiente_powerup), ('POWERUP', None))

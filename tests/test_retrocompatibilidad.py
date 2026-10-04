@@ -42,6 +42,8 @@ class TestTetrisClasico(unittest.TestCase):
     def limpiar_ultima_fila(self, juego):
         juego.grid[juego.alto - 1] = [1] * juego.ancho
         juego.tetris_limpiar_lineas()
+        for _ in range(6):   # el borrado es diferido (parpadeo de la fila)
+            juego.game_loop()
         juego.tetris_spawn_pieza()
         juego.dibujar()
 
