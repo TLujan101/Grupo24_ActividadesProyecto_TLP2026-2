@@ -23,3 +23,6 @@ Desktop.ini
 
 # Entorno de desarrollo local (no se comparte)
 .devcontainer/
+
+# Workspace de ejecucion de planes (ledger y briefs, no versionar)
+.superpowers/
