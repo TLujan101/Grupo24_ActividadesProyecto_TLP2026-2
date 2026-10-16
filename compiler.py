@@ -12,7 +12,9 @@ def lexer(codigo_fuente):
     codigo_fuente = re.sub(r'#.*', '', codigo_fuente)
     # Un nombre de nota (E5, A4, G3) es un token propio: si no, el lexer
     # partia "E5" en "E" y "5" y la nota se colaba como texto no reconocido.
-    token_regex = r'\b[A-G][0-9]+\b|\b[A-Z_]+\b|\d+|[\[\](),:]'
+    # El grupo de decimales va pegado al de enteros: suelto, \d+ se comia el 0
+    # de 0.15 y el punto caia en resto como caracter no reconocido.
+    token_regex = r'\b[A-G][0-9]+\b|\b[A-Z_]+\b|\d+(?:\.\d+)?|[\[\](),:]'
     tokens = re.findall(token_regex, codigo_fuente)
     resto = re.sub(token_regex, '', codigo_fuente)
     if resto.strip():
