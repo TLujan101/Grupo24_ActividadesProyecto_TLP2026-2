@@ -239,10 +239,40 @@ class TestMenuNiveles(unittest.TestCase):
     def test_al_elegir_los_botones_desaparecen(self):
         juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'BABY'))
         juego.run()
-        self.assertFalse(any(b.destruido for b in juego.botones_nivel))
+        # Guardar los widgets ANTES de elegir: elegir_nivel() vacia
+        # self.botones_nivel, asi que afirmar sobre la lista despues seria
+        # afirmar sobre [] y all() de [] es True vacuamente.
+        botones = list(juego.botones_nivel)
+        self.assertEqual(len(botones), 3)
+        self.assertFalse(any(b.destruido for b in botones))
         juego.manejar_input_gui(EventoFalso('1'))
-        self.assertTrue(all(b.destruido for b in juego.botones_nivel))
+        self.assertTrue(all(b.destruido for b in botones))
         self.assertEqual(juego.botones_nivel, [])
+
+    def test_al_elegir_tambien_desaparece_el_rotulo(self):
+        # El spec 6.5 pide destruir el titulo tambien: si se queda, el texto
+        # 'ELIGE NIVEL' flota sobre la partida empezada.
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'BABY'))
+        juego.run()
+        rotulo = juego._rotulo_nivel
+        self.assertIsNotNone(rotulo)
+        self.assertEqual(rotulo.opciones['text'], 'ELIGE NIVEL')
+        self.assertFalse(rotulo.destruido)
+        juego.manejar_input_gui(EventoFalso('1'))
+        self.assertTrue(rotulo.destruido)
+        self.assertIsNone(juego._rotulo_nivel)
+
+    def test_el_menu_se_arma_en_el_panel_lateral(self):
+        # El menu va en marco_score, el panel que ya existe: sin ventana nueva.
+        # Si se colgara de self.root, este test lo nota.
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'BABY'))
+        juego.run()
+        for widget in [juego._rotulo_nivel] + list(juego.botones_nivel):
+            self.assertIs(widget.master, juego.marco_score)
+        # Y ninguno cuelga de la ventana principal
+        for hijo in juego.root.hijos:
+            self.assertIsNot(hijo, juego._rotulo_nivel)
+            self.assertNotIn(hijo, juego.botones_nivel)
 
     def test_con_el_menu_abierto_solo_sirven_los_digitos(self):
         eventos = {'ON_KEY_UP': [{'accion': 'MOVE', 'objeto': 'UP', 'params': []}]}

@@ -179,11 +179,31 @@ Fallar temprano y con mensaje claro, nunca ignorar en silencio:
 | `START: X` sin `LEVEL X` declarado | `el nivel inicial 'X' no esta definido` |
 | Nombre de nivel repetido | `el nivel 'X' esta definido dos veces` |
 | `LEVELS:` sin ningún nivel | `LEVELS no declara ningun nivel` |
-| `TICK` con valor <= 0 | `TICK del nivel 'X' debe ser mayor que 0` |
+| Segundo bloque `LEVELS` | `LEVELS esta declarado mas de una vez` |
+| `TICK` con valor `<= 0`, `nan` o `inf` | `TICK del nivel 'X' debe ser mayor que 0` |
 | Modificador desconocido | `modificador desconocido 'TIC' en el nivel 'X'` |
 
-La última es la más importante: sin ella un typo pasa desapercibido y el nivel
-arranca con el default sin que nadie entienda por qué.
+La penúltima es la más importante: sin ella un typo pasa desapercibido y el
+nivel arranca con el default sin que nadie entienda por qué.
+
+Dos filas de esta tabla **vinieron de la revisión de rama**, no del diseño
+original:
+
+- **Un segundo bloque `LEVELS` no puede pisar el primero.** El parser despacha
+  `LEVELS` en cualquier posición del archivo, así que sin ese chequeo un segundo
+  bloque sobrescribía el AST en silencio y el autor creía haber declarado los
+  dos.
+- **`nan` e `inf` son floats válidos para `float()` pero no son ticks.** La
+  validación original era `tick <= 0`, y tanto `nan <= 0` como `inf <= 0` dan
+  `False`, así que ambos se colaban. El motor se come el valor y el ciclo queda
+  congelado para siempre: `0.05 >= nan` es `False`. La partida arrancaba, se
+  veía, aceptaba teclas y nunca pasaba un tick, sin ningún error de compilación.
+  La condición correcta es `0 < tick < INFINITO`, que además rechaza `nan`
+  porque `0 < nan` ya es `False`. De paso evita que `json.dump` escriba `NaN` /
+  `Infinity` crudos, que no son JSON válido (RFC 8259).
+
+Es el único modo de falla de la revisión cuyo síntoma no lleva ni rastro al
+error real, por eso se/documenta y no se trata como un refinamiento.
 
 ## 6. Motor (`engine/game.py`)
 

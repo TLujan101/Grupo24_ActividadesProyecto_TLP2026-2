@@ -42,7 +42,7 @@
 <elegir_nivel>     ::= "" | "START" ":" <identificador>
 <definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
 <definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
-<modificadores_nivel> ::= <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
+<modificadores_nivel> ::= "" | <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
 <modificador_nivel> ::= "TICK" <real>
 
 <identificador> ::= <letra> | <letra> <identificador>

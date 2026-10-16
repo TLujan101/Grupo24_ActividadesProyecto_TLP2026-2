@@ -8,6 +8,10 @@ import sys
 import re
 import json
 
+# Techo para validar TICK:asi se rechazan nan e inf, que son floats validos
+# pero romperian el ciclo de juego (ver parsear_nivel).
+INFINITO = float('inf')
+
 def lexer(codigo_fuente):
     codigo_fuente = re.sub(r'#.*', '', codigo_fuente)
     # Un nombre de nota (E5, A4, G3) es un token propio: si no, el lexer
@@ -161,6 +165,10 @@ class Parser:
 
     def parsear_niveles(self):
         # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END
+        if not self.niveles_es_default:
+            # Sin esto, un segundo bloque pisaba el primero en silencio y el
+            # autor creia haber declarado los dos.
+            raise Exception("Error de sintaxis: LEVELS esta declarado mas de una vez")
         self.consumir('LEVELS')
         self.consumir(':')
 
@@ -172,9 +180,8 @@ class Parser:
 
         niveles = []
         # El nivel por defecto (BABY) NO cuenta como nombre ya declarado: un
-        # .brick puede declarar perfectamente un nivel llamado BABY. Los de un
-        # bloque LEVELS anterior si cuentan.
-        vistos = [] if self.niveles_es_default else [n['nombre'] for n in self.ast['levels']]
+        # .brick puede declarar perfectamente un nivel llamado BABY.
+        vistos = []
         while self.ver() == 'LEVEL':
             nivel = self.parsear_nivel(vistos)
             vistos.append(nivel['nombre'])
@@ -214,7 +221,12 @@ class Parser:
             self.consumir()
             nivel[clave] = self.consumir_decimal()
         self.consumir('END')
-        if 'tick' in nivel and nivel['tick'] <= 0:
+        if 'tick' in nivel and not (0 < nivel['tick'] < INFINITO):
+            # La comparacion sola no alcanza: en py2 nan <= 0 es False y
+            # inf <= 0 tambien, asi que ambos se colaban. Con un TICK nan el
+            # motor se come el valor (0.05 >= nan es False para siempre) y la
+            # partida queda congelada sin error de compilacion. Ademas json.dump
+            # escribe NaN/Infinity crudos, que no son JSON valido.
             raise Exception("Error de sintaxis: TICK del nivel '" + nombre +
                             "' debe ser mayor que 0")
         return nivel

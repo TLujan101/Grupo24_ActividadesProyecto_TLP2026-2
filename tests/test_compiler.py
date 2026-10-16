@@ -105,6 +105,19 @@ class TestParserNiveles(unittest.TestCase):
              "TICK del nivel 'BABY' debe ser mayor que 0"),
             ('LEVELS:\n  LEVEL BABY:\n    TIC 0.15\n  END\nEND\n',
              "modificador desconocido 'TIC' en el nivel 'BABY'"),
+            # nan <= 0 es False e inf <= 0 tambien: la comparacion sola no
+            # los caza. Sin esto el motor se come un TICK nan y el juego queda
+            # congelado (0.05 >= nan es False para siempre), sin error.
+            ('LEVELS:\n  LEVEL BABY:\n    TICK NAN\n  END\nEND\n',
+             "TICK del nivel 'BABY' debe ser mayor que 0"),
+            ('LEVELS:\n  LEVEL BABY:\n    TICK INF\n  END\nEND\n',
+             "TICK del nivel 'BABY' debe ser mayor que 0"),
+            ('LEVELS:\n  LEVEL BABY:\n    TICK INFINITY\n  END\nEND\n',
+             "TICK del nivel 'BABY' debe ser mayor que 0"),
+            # Un segundo bloque descartaria el primero en silencio, y el autor
+            # creeria haber declarado los dos.
+            ('LEVELS:\n  LEVEL UNO:\n  END\nEND\nLEVELS:\n  LEVEL DOS:\n  END\nEND\n',
+             'LEVELS esta declarado mas de una vez'),
         ]
         for fuente, esperado in casos:
             # assertRaises como contexto (py2.7). Nada de try/except con
@@ -114,6 +127,28 @@ class TestParserNiveles(unittest.TestCase):
             with self.assertRaises(Exception) as contexto:
                 compilar(fuente)
             self.assertIn(esperado, str(contexto.exception))
+
+    def test_el_orden_de_los_niveles_sobrevive_al_json(self):
+        # Razon de ser de que levels sea lista y no dict: en py2.7 un dict
+        # pierde el orden de declaracion al pasar por JSON, y el menu se
+        # numera por posicion. Este test es el round-trip completo.
+        import json
+        import StringIO
+        fuente = ('LEVELS:\n'
+                  '  LEVEL C:\n    TICK 0.3\n  END\n'
+                  '  LEVEL A:\n    TICK 0.2\n  END\n'
+                  '  LEVEL B:\n    TICK 0.1\n  END\n'
+                  'END\n')
+        ast = compilar(fuente)
+        # Como el compilador escribe (json.dump) y el runtime lee (json.load)
+        salida = StringIO.StringIO()
+        json.dump(ast, salida)
+        salida.seek(0)
+        recuperado = json.load(salida)
+        self.assertEqual([n['nombre'] for n in recuperado['levels']],
+                         ['C', 'A', 'B'])
+        self.assertEqual([n['tick'] for n in recuperado['levels']],
+                         [0.3, 0.2, 0.1])
 
 
 if __name__ == '__main__':

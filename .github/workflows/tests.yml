@@ -57,6 +57,8 @@ jobs:
         include:
           - grupo: Retrocompatibilidad (juegos clasicos sin reborn ni remake)
             modulo: tests.test_retrocompatibilidad
+          - grupo: Compilador (lexer y parser)
+            modulo: tests.test_compiler
           - grupo: Game (clase base)
             modulo: tests.test_game
           - grupo: Tetris
