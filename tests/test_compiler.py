@@ -63,7 +63,28 @@ class TestLexer(unittest.TestCase):
             compilar('DEFINE SONG X:\n  NOTE D# 200\nEND\n')
         self.assertIn("'#'", str(contexto.exception))
 
-    def test_cadena_con_comentarios_y_decimales(self):
+    def test_silencio_rest(self):
+        # REST se traduce a una nota de 0 Hz: sin(0) = 0, asi que suena mudo sin
+        # que el sintetizador necesite ninguna rama especial.
+        ast = compilar('DEFINE SONG X:\n  NOTE C4 200\n  NOTE REST 400\nEND\n')
+        self.assertEqual(ast['songs']['X']['notas'], [[261.6, 200], [0.0, 400]])
+
+def test_onda_de_la_cancion(self):
+        ast = compilar('DEFINE SONG X WAVE SQUARE:\n  NOTE C4 200\nEND\n')
+        self.assertEqual(ast['songs']['X']['wave'], 'SQUARE')
+        # Sin WAVE, senoidal
+        ast = compilar('DEFINE SONG Y:\n  NOTE C4 200\nEND\n')
+        self.assertEqual(ast['songs']['Y']['wave'], 'SINE')
+        # Un efecto no lleva onda: suena una vez y no se elige timbre
+        ast = compilar('DEFINE EFFECT Z:\n  NOTE C4 200\nEND\n')
+        self.assertNotIn('wave', ast['effects']['Z'])
+
+def test_onda_invalida_avisada(self):
+        with self.assertRaises(Exception) as contexto:
+            compilar('DEFINE SONG X WAVE TRIANGULO:\n  NOTE C4 200\nEND\n')
+        self.assertIn("onda 'TRIANGULO' no valida", str(contexto.exception))
+
+def test_cadena_con_comentarios_y_decimales(self):
         fuente = '# velocidad\nLEVEL BABY:\n  TICK 0.15\nEND'
         self.assertEqual(compiler.lexer(fuente),
                          ['LEVEL', 'BABY', ':', 'TICK', '0.15', 'END'])

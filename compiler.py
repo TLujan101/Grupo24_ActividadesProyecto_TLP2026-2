@@ -12,6 +12,17 @@ import json
 # pero romperian el ciclo de juego (ver parsear_nivel).
 INFINITO = float('inf')
 
+# Silencio dentro de una partitura. Es una palabra y no una letra porque REST
+# no es una nota: no se puede afinar. Se traduce a una nota de 0 Hz, que el
+# sintetizador produce como silencio (sen(0) = 0).
+SILENCIO = 'REST'
+
+# Timbres. Duplicados de tracker.ONDA_* a proposito: el compilador no importa
+# de engine/ porque engine/__init__.py arrastraría Tkinter al proceso de
+# compilación. Misma regla que NIVEL_POR_DEFECTO.
+ONDA_SENOIDAL = 'SINE'
+ONDAS = ('SINE', 'SQUARE')
+
 def lexer(codigo_fuente):
     # Un '#' precedido por letra A-G no abre comentario: es el sostenido de una
     # nota (D#4). Si lo abriera, se comia el resto de la linea y con ella la
@@ -285,13 +296,21 @@ class Parser:
         return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
 
     def parsear_cancion(self):
+        # DEFINE SONG <nombre> [WAVE <onda>] ":" <notas> END
         self.consumir('DEFINE')
         self.consumir('SONG')
         nombre = self.consumir()
+        onda = ONDA_SENOIDAL
+        if self.ver() == 'WAVE':
+            self.consumir('WAVE')
+            onda = self.consumir()
+            if onda not in ONDAS:
+                raise Exception("Error de sintaxis: onda '" + str(onda) +
+                                "' no valida (use SINE o SQUARE)")
         self.consumir(':')
         notas = self.leer_notas()
         self.consumir('END')
-        self.ast['songs'][nombre] = {"notas": notas}
+        self.ast['songs'][nombre] = {"notas": notas, "wave": onda}
 
     def parsear_efecto(self):
         self.consumir('DEFINE')
@@ -310,7 +329,13 @@ class Parser:
             if token_nota is None:
                 raise Exception("Error de sintaxis: NOTE sin nombre antes del fin del archivo.")
             ms = self.consumir_numero()
-            notas.append([self.nota_a_hz(token_nota), ms])
+            if token_nota == SILENCIO:
+                # Un REST es una nota de frecuencia 0: sin(0) = 0, asi que el
+                # sintetizador no necesita ninguna rama para callar, y el
+                # tiempo sigue contando porque el bucle consume sus muestras.
+                notas.append([0.0, ms])
+            else:
+                notas.append([self.nota_a_hz(token_nota), ms])
         return notas
 
 

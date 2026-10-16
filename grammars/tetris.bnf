@@ -28,11 +28,14 @@
 <accion_efecto> ::= "PLAY_EFFECT" <identificador>
 <accion_parar_musica> ::= "STOP_MUSIC"
 
-<definicion_cancion> ::= "DEFINE" "SONG" <identificador> ":" <notas> "END"
+<definicion_cancion> ::= "DEFINE" "SONG" <identificador> <extras_musica> ":" <notas> "END"
+<extras_musica> ::= "" | "WAVE" <onda>
+<onda>        ::= "SINE" | "SQUARE"
 <definicion_efecto>  ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END"
-<notas>       ::= <nota> | <nota> <notas>
-<nota>        ::= "NOTE" <nota_musical> <numero>
-<nota_musical> ::= <letra_a_g> <digito>
+<notas>       ::= <nota> | <silencio> | <nota> <notas> | <silencio> <notas>
+<nota>        ::= "NOTE" <nombre_nota> <numero>
+<silencio>    ::= "REST" <numero>
+<nombre_nota> ::= <letra_a_g> "#"? <digito>
 <letra_a_g>   ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
 
 <direccion>     ::= "LEFT" | "RIGHT" | "DOWN"

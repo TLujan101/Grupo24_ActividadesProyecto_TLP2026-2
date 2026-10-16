@@ -59,6 +59,8 @@ jobs:
             modulo: tests.test_retrocompatibilidad
           - grupo: Compilador (lexer y parser)
             modulo: tests.test_compiler
+          - grupo: Sintetizador (tracker)
+            modulo: tests.test_tracker
           - grupo: Game (clase base)
             modulo: tests.test_game
           - grupo: Tetris

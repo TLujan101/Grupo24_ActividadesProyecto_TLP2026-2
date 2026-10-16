@@ -22,29 +22,39 @@ FPS = 22050                  # muestras por segundo
 PICO = 0.04                  # amplitud maxima normalizada
 BYTES_POR_MUESTRA = 2        # mono de 16 bits
 
+# Timbres. La senoidal es suave y no cansa el oído (tetris la usa). La
+# cuadrada es la de los chips de 8 bits, y por eso suena "chiptune": es lo que
+# hace que un tema se lea como retro.
+ONDA_SENOIDAL = 'SINE'
+ONDA_CUADRADA = 'SQUARE'
+ONDAS = (ONDA_SENOIDAL, ONDA_CUADRADA)
+
 # Cache en RAM: {firma: pcm_bytes}. La firma es el MD5 de la partitura,
 # asi dos canciones con las mismas notas comparten un solo bloque.
 _CACHE = {}
 
 
-def firma_partitura(notas):
+def firma_partitura(notas, onda=ONDA_SENOIDAL):
     # Huella del contenido: cambiar una nota produce otra firma y por tanto
-    # otra cancion sintetizada, sin tener que invalidar nada a mano.
-    return hashlib.md5(repr(notas).encode('utf-8')).hexdigest()[:12]
+    # otra cancion sintetizada, sin tener que invalidar nada a mano. La onda va
+    # dentro de la firma porque el timbre tambien es contenido: sin esto, una
+    # cancion cuadrada y una senoidal con las mismas notas compartirian la
+    # entrada de cache y la segunda sonaria con el timbre equivocado.
+    return hashlib.md5(repr((onda, notas)).encode('utf-8')).hexdigest()[:12]
 
 
-def cancion_pcm(nombre, notas):
+def cancion_pcm(nombre, notas, onda=ONDA_SENOIDAL):
     """Devuelve el PCM crudo (16 bits LE, mono) de la cancion, o None.
 
     `nombre` solo se usa para depurar; la cache se indexa por contenido.
     """
     if not notas:
         return None
-    firma = firma_partitura(notas)
+    firma = firma_partitura(notas, onda)
     if firma in _CACHE:
         return _CACHE[firma]
     try:
-        pcm = sintetizar(notas)
+        pcm = sintetizar(notas, onda)
     except Exception:
         return None
     _CACHE[firma] = pcm
@@ -56,7 +66,7 @@ def duracion_pcm(notas):
     return sum(int(voz[1]) for voz in notas)
 
 
-def sintetizar(notas):
+def sintetizar(notas, onda=ONDA_SENOIDAL):
     """Genera las muestras de la partitura y devuelve el PCM empaquetado.
 
     Se acumula en un array('h') y no en una lista de floats a proposito:
@@ -66,6 +76,7 @@ def sintetizar(notas):
     """
     muestras = array.array('h')
     pico = 1e-9
+    cuadrada = (onda == ONDA_CUADRADA)
 
     for voz in notas:
         frec, ms = float(voz[0]), int(voz[1])
@@ -74,14 +85,24 @@ def sintetizar(notas):
         borde = max(1, int(FPS * 0.005))
         for i in range(total):
             t = float(i) / FPS
-            lead = math.sin(2 * math.pi * frec * t)
-            bajo = math.sin(2 * math.pi * (frec / 2.0) * t)
+            if cuadrada:
+                # Solo dos niveles. El sub-octavo se apaga: en un chiptune lo
+                # que suena es la cuadrada limpia, no una mezcla.
+                lead = 1.0 if math.sin(2 * math.pi * frec * t) >= 0 else -1.0
+                bajo = 0.0
+            else:
+                lead = math.sin(2 * math.pi * frec * t)
+                bajo = math.sin(2 * math.pi * (frec / 2.0) * t)
             env = min(1.0, float(i) / borde, float(total - i) / borde)
             muestra = (0.22 * lead + 0.10 * bajo) * env * 32767.0
-            if muestra < 0:
+            # La senoidal se rectifica para que sea siempre positiva. La
+            # cuadrada NO: si se rectificara, el ciclo negativo se volveria
+            # positivo y la onda seria un bloque recto sin alternancia, o sea
+            # un clic en vez de un timbre.
+            if not cuadrada and muestra < 0:
                 muestra = -muestra
-            if muestra > pico:
-                pico = muestra
+            if abs(muestra) > pico:
+                pico = abs(muestra)
             muestras.append(int(muestra))
 
     # Segunda pasada: normalizar al pico objetivo. Se puede hacer porque el

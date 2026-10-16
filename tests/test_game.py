@@ -304,6 +304,21 @@ class TestMenuNiveles(unittest.TestCase):
         self.assertEqual(juego.acciones, [('MOVE', 'UP')])
 
 
+def test_el_motor_pasa_la_onda_al_sintetizador(self):
+    # El timbre viaja del .brick al tracker. Si el motor lo ignorara, la
+    # cancion cuadrada sonaria senoidal sin que nada lo delatara.
+    from engine import tracker
+    notas = [[523.3, 400]]
+    for onda, esperado in (('SQUARE', tracker.ONDA_CUADRADA), ('SINE', tracker.ONDA_SENOIDAL)):
+        datos = datos_niveles([{'nombre': 'BABY'}], 'BABY',
+                              {'ON_START': [{'accion': 'PLAY_MUSIC', 'objeto': 'T',
+                                             'params': []}]})
+        datos['songs'] = {'T': {'notas': notas, 'wave': onda}}
+        juego = JuegoPrueba(datos)
+        self.assertEqual(juego.audio.musica_actual,
+                         tracker.firma_partitura(notas, esperado), onda)
+
+
 class TestMusicaPorNivel(unittest.TestCase):
     # El doble de audio registra ('musica', firma), donde firma es el MD5 de la
     # partitura, no el nombre de la cancion: los tests comparan contra la misma

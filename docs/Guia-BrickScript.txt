@@ -96,6 +96,11 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
     # no abre comentario, porque va pegado a la letra. Un efecto se declara
     igual pero con DEFINE EFFECT, y suena una vez sin cortar la musica.
 
+    - WAVE SINE | WAVE SQUARE elige el timbre de la cancion (por defecto
+      SINE, suave). SQUARE es la onda de los chips de 8 bits. Solo en SONG.
+    - NOTE REST <ms> es un silencio de esa duracion: suma tiempo a la
+      partitura. No es una nota, por eso no lleva letra ni octava.
+
     PLAY_MUSIC <cancion>   arranca la cancion en bucle
     PLAY_EFFECT <efecto>   suena una vez y NO corta la musica
     STOP_MUSIC             corta la musica

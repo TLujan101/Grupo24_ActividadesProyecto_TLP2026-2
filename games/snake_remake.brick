@@ -45,7 +45,9 @@ DEFINE SONG TEMA_ENTUSIASTA:
 END
 
 # Tema de Nyan Cat: rapido y saltarin, motivo que se repite en Do mayor.
-DEFINE SONG TEMA_NYAN:
+# WAVE SQUARE lo hace timbre de chip de 8 bits, que es lo que lo hace sonar
+# "nyan": con la senoidal por defecto suena a organo suave.
+DEFINE SONG TEMA_NYAN WAVE SQUARE:
   NOTE G5 150
   NOTE A5 150
   NOTE D#5 150
@@ -122,8 +124,11 @@ DEFINE EFFECT COMER:
 END
 
 DEFINE EFFECT MORIR:
+  NOTE REST 120
   NOTE G5 200
+  NOTE REST 60
   NOTE E5 200
+  NOTE REST 60
   NOTE C5 400
 END
 

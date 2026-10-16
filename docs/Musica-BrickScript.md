@@ -625,4 +625,95 @@ solo se borra al cerrar la ventana — y los tests nunca cierran la ventana. Era
 
 ---
 
+## 13. Silencios (`REST`) y onda cuadrada
+
+### El silencio: casi no costó nada
+
+`NOTE REST 400` se traduce a una nota de **frecuencia 0**, y ahí está toda la
+graceza:
+
+```python
+lead = math.sin(2 * math.pi * frec * t)     # sen(0) = 0
+```
+
+El bucle sigue consumiendo las muestras de la duración, así que el silencio
+**suma tiempo** a la línea temporal en vez de quitárselo a las notas de al lado.
+No hizo falta ninguna rama en el sintetizador, solo reconocer la palabra en el
+compilador:
+
+```python
+if token_nota == SILENCIO:
+    notas.append([0.0, ms])
+```
+
+`REST` es una palabra y no una letra porque **no es una nota: no se puede
+afinar**. Es el mismo criterio por el que en la partitura el silencio se dibuja
+con su propio símbolo y no con una letra.
+
+### La onda cuadrada: el timbre es lo que hace "chiptune"
+
+Hasta aquí el sintetizador generaba dos senoidales:
+
+```python
+lead = math.sin(2 * math.pi * frec * t)
+bajo = math.sin(2 * math.pi * (frec / 2.0) * t)
+muestra = (0.22 * lead + 0.10 * bajo) * env
+```
+
+Eso es un timbre **suave, tipo órgano**. Para el tema de Nyan Cat no servía:
+el original es chiptune de 8 bits, que se hace con una **onda cuadrada**. Con
+las notas correctas pero timbre de órgano, no sonaba a Nyan por más que la
+melodía fuera la buena.
+
+Por eso la onda se declara **por canción**, no globalmente:
+
+```
+DEFINE SONG TEMA_NYAN WAVE SQUARE:
+  NOTE G5 150
+  ...
+END
+```
+
+Tetris sigue con `SINE` (suena suave, que era lo queijahEa bien) y Nyan usa
+`SQUARE`. Cada canción elige su timbre.
+
+### Un detalle: la cuadrada no se rectifica
+
+El sintetizador enderezaba la onda porque con senoidal eso produce un timbre
+agradable y siempre positivo:
+
+```python
+if muestra < 0:
+    muestra = -muestra
+```
+
+Aplicado a una cuadrada **la destruye**: el ciclo negativo se volvería positivo
+y el resultado sería un bloque recto sin alternancia, o sea un clic en vez de
+un timbre. Por eso la rectificación se salta para la cuadrada:
+
+```python
+if not cuadrada and muestra < 0:
+    muestra = -muestra
+```
+
+Hay un test que lo vigila (`test_la_cuadrada_es_bipolar_y_de_dos_niveles`):
+mira el medio de la nota —el ataque y la liberación de 5 ms crean valores
+intermedios a propósito— y comprueba que hay exactamente dos niveles, opuestos.
+
+### Y el detalle que más fácil se pasa por alto: la caché
+
+`firma_partitura` hasheaba **solo las notas**. Al añadir el timbre, una canción
+cuadrada y una senoidal con las mismas notas habrían tenido la misma firma, y
+la segunda habría sonado con el timbre de la primera **sin decir nada**. El
+timbre es contenido, así que va dentro de la huella:
+
+```python
+return hashlib.md5(repr((onda, notas)).encode('utf-8')).hexdigest()[:12]
+```
+
+Para comprobar que la senoidal no se había movido, se comparó el PCM del tema de
+Tetris antes y después del cambio: **620 928 bytes, idéntico byte a byte**.
+
+---
+
 *Documento del grupo 24 – Proyecto TLP 2026-2*
