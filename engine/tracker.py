@@ -99,8 +99,10 @@ def sintetizar(notas, onda=ONDA_SENOIDAL):
     de floats ocuparia del orden de 24 bytes. Para una cancion de 14 s son
     ~620 KB en vez de ~7 MB.
 
-    Una nota de frecuencia 0 (un REST) suena a silencio sin ninguna rama
-    especial: sin(0) = 0, y el bucle sigue consumiendo sus muestras.
+    Una nota de frecuencia 0 (un REST) suena a silencio en cualquier timbre:
+    con cuadrada, sin(2*pi*0*t) = 0 cae del lado positivo y daria un nivel
+    alto fijo, así que hay una rama `frec == 0.0` que la llama cero. El bucle
+    sigue consumiendo sus muestras, así que el silencio suma tiempo.
     """
     return _normalizar(_render_voz(notas, onda))
 

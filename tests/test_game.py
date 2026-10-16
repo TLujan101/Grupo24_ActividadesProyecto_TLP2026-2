@@ -381,6 +381,19 @@ class TestMusicaPorNivel(unittest.TestCase):
         juego = JuegoPrueba(self.un_nivel_con_musica('BABY', eventos))
         self.assertEqual(juego.audio.musica_actual, self.firma(self.NYAN))
 
+    def test_cancion_con_voces_llega_al_audio_con_su_firma(self):
+        # El dispatch de `voces` en musica_brick tiene que ejercerse de punta
+        # a punta: una cancion multi-voz llega al audio con firma_voces, no
+        # con la firma de una lista plana.
+        from engine import tracker
+        voces = [[[440.0, 200]], [[220.0, 200]]]
+        datos_juego = datos_niveles([{'nombre': 'BABY'}], 'BABY')
+        datos_juego['songs'] = {'DOBLE': {'voces': voces, 'wave': 'SQUARE'}}
+        juego = JuegoPrueba(datos_juego)
+        juego.musica_brick('DOBLE')
+        self.assertEqual(juego.audio.llamadas,
+                         [('musica', tracker.firma_voces(voces, 'SQUARE'))])
+
     def test_nivel_sin_musica_no_pide_nada(self):
         datos_juego = datos_niveles([{'nombre': 'BABY'}, {'nombre': 'NYAN_CAT'}],
                                     'BABY')

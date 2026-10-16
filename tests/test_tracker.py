@@ -143,11 +143,17 @@ class TestVoces(unittest.TestCase):
 
     def test_la_firma_distingue_una_de_una_misma_mas_varias_voces(self):
         nota = [[440.0, 200]]
-        self.assertNotEqual(tracker.firma_partitura(nota, 'SINE'),
-                            tracker.firma_partitura([nota, nota], 'SINE'))
-        # Y dos voces iguales SI comparten
-        self.assertEqual(tracker.firma_partitura([nota, nota], 'SINE'),
-                         tracker.firma_partitura([nota, nota], 'SINE'))
+        # Mismo contenido, misma firma de voces
+        self.assertEqual(tracker.firma_voces([nota[0]], 'SINE'),
+                         tracker.firma_voces([nota[0]], 'SINE'))
+        # Distinto contenido, distinta firma
+        self.assertNotEqual(tracker.firma_voces([nota[0]], 'SINE'),
+                            tracker.firma_voces([[nota[0][0], 400]], 'SINE'))
+        # La firma de una lista plana por firma_partitura es la misma que por
+        # firma_voces (ambas hashean repr((onda, notas))); el motor las elige
+        # segun el bloque que lleve el .brick.
+        self.assertEqual(tracker.firma_partitura(nota, 'SINE'),
+                         tracker.firma_voces(nota, 'SINE'))
 
     def test_tres_voces_tambien(self):
         # No es "dos voces": es N.

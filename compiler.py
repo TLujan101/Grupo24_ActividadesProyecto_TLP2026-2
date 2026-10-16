@@ -318,7 +318,7 @@ class Parser:
         self.consumir('END')
 
     def leer_voces(self):
-        # VOICE <n>: <notas> END  (una o mas)
+        # VOICE <n>: <notas> END  (dos o mas)
         # El numero es informativo: las voces se mezclan entre si, asi que solo
         # importa el orden de declaracion. Se valida para dar un error claro si
         # alguien repite uno.

@@ -4,6 +4,7 @@
 
 import array
 import glob
+import hashlib
 import json
 import os
 import random
@@ -138,6 +139,17 @@ class TestJuegosReales(unittest.TestCase):
         self.assertTrue(any(m != 0 for m in muestras))
         self.assertTrue(all(m == 0 for m in muestras[:int(tracker.FPS * 0.6)]))
         self.assertTrue(all(m == 0 for m in muestras[-int(tracker.FPS * 1.5):]))
+
+    def test_tema_tetris_pcm_identico_byte_a_byte(self):
+        # Test dorado: el camino senoidal no se puede mover sin que este test
+        # grite. 37 notas, 620928 bytes, md5 fijo.
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'tetris_reborn.brick'))
+        cancion = datos_juego['songs']['TETRIS_TEMA_A']
+        pcm = tracker.cancion_pcm('TETRIS_TEMA_A', cancion['notas'],
+                                   cancion.get('wave', tracker.ONDA_SENOIDAL))
+        self.assertEqual(len(pcm), 620928)
+        self.assertEqual(hashlib.md5(pcm).hexdigest(),
+                         '773d9d4ca93f5565e853cfc40bda2c5a')
 
     def test_snake_clasico_no_abre_menu(self):
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake.brick'))
