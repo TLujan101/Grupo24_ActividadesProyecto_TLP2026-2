@@ -45,6 +45,7 @@ class Game(object):
         self.nivel_actual = config.get('start_level') or NIVEL_POR_DEFECTO
         self.nivel_config = self.config_de_nivel(self.nivel_actual)
         self.iniciado = False
+        self.botones_nivel = []   # widgets del menu de seleccion; vacio si no hay
         self.grid = [[0 for _ in range(self.ancho)] for _ in range(self.alto)]
         self.puntuacion = 0
         self.juego_terminado = False
@@ -159,6 +160,50 @@ class Game(object):
         self.ejecutar_evento('ON_START')
         self.iniciado = True
 
+    @staticmethod
+    def etiqueta_nivel(nombre):
+        # La etiqueta sale del identificador, no de una tabla de nombres: asi el
+        # motor sigue sin saber que existe un nivel 'NYAN_CAT'. NYAN_CAT se
+        # muestra como 'Nyan Cat' sin que el .brick declare nada extra.
+        # No usa self: por eso es staticmethod (en py2 un metodo normal no se
+        # puede llamar sobre la clase).
+        return nombre.replace('_', ' ').title()
+
+    def mostrar_selector_nivel(self):
+        # Botones apilados en el panel lateral que ya existe: pack() los apila
+        # y tk.Button da el clic con command, sin ventana nueva ni overlay.
+        rotulo = tk.Label(self.marco_score, text='ELIGE NIVEL',
+                          bg='#1e1e2e', fg='#03a80b',
+                          font=('Consolas', 12, 'bold'))
+        rotulo.pack(pady=(30, 10))
+        for i, nivel in enumerate(self.niveles):
+            # El numero es la tecla: elige por posicion en el orden del .brick,
+            # que es el orden de la lista (en py2.7 un dict lo perderia).
+            texto = '%d. %s' % (i + 1, self.etiqueta_nivel(nivel.get('nombre')))
+            # El lambda i=i es obligatorio: sin el, todos los botones capturan
+            # la ultima iteracion y eligen el mismo nivel.
+            boton = tk.Button(self.marco_score, text=texto,
+                              command=lambda i=i: self.elegir_nivel(i),
+                              font=('Consolas', 10), bg='#2a2a3e', fg='#03a80b',
+                              activebackground='#027b08', activeforeground='#1e1e2e',
+                              bd=0, padx=10, pady=5)
+            boton.pack(pady=4, padx=10)
+            self.botones_nivel.append(boton)
+        self._rotulo_nivel = rotulo
+
+    def elegir_nivel(self, indice):
+        self.nivel_actual = self.niveles[indice].get('nombre')
+        self.nivel_config = self.niveles[indice]
+        # Los widgets del menu se van: si se quedan, flotan sobre la partida.
+        for boton in self.botones_nivel:
+            boton.destroy()
+        self.botones_nivel = []
+        if getattr(self, '_rotulo_nivel', None):
+            self._rotulo_nivel.destroy()
+            self._rotulo_nivel = None
+        self.iniciar_partida()
+        self.root.after(50, self.game_loop)
+
 
     # AUDIO (opcional: sin SONG ni EFFECT el juego arranca en silencio)
     # -----
@@ -211,7 +256,12 @@ class Game(object):
     # --------------
 
     def run(self):
-        self.root.after(50, self.game_loop)
+        # Con 2+ niveles hay que preguntar antes de jugar: se arma el menu y NO
+        # se programa el loop. elegir_nivel() lo arranca.
+        if not self.iniciado:
+            self.mostrar_selector_nivel()
+        else:
+            self.root.after(50, self.game_loop)
         self.root.mainloop()
 
     def game_loop(self):
@@ -259,6 +309,13 @@ class Game(object):
         self.manejar_tecla(key)
 
     def manejar_tecla(self, key):
+        # Menu abierto: solo los digitos 1..N eligen nivel. El menu se traga el
+        # resto, incluidas las flechas, para que mover la Serpiente antes de
+        # empezar no dispare ON_KEY_*.
+        if not self.iniciado:
+            if key.isdigit() and 1 <= int(key) <= len(self.niveles):
+                self.elegir_nivel(int(key) - 1)
+            return
         # Las flechas disparan ON_KEY_*; cada juego decide la accion.
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
