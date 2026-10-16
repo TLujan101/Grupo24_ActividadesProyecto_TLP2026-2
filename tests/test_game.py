@@ -3,7 +3,7 @@
 
 import unittest
 
-from tests.tk_falso import EventoFalso
+from tests.tk_falso import EventoFalso, AudioFalso
 from engine.game import Game, COLOR_GRID_FIJA
 
 
@@ -47,6 +47,16 @@ class TestGame(unittest.TestCase):
         juego = JuegoPrueba(datos())
         self.assertRaises(NotImplementedError, Game.ejecutar_accion, juego, 'SPAWN', None, {})
         self.assertRaises(NotImplementedError, Game.dibujar_elementos, juego)
+
+    def test_el_doble_de_audio_esta_conectado(self):
+        # tk_falso.instalar() registraba sys.modules['audio'], pero game.py hace
+        # un import RELATIVO (from .audio import ...), que resuelve a engine.audio
+        # y nunca consulta ese diccionario. Los tests terminaban usando el gestor
+        # REAL: ademas de sonar, cada juego creado abria una carpeta temporal que
+        # solo se borra al cerrar la ventana, y los tests nunca la cierran.
+        juego = JuegoPrueba(datos())
+        self.assertIsInstance(juego.audio, AudioFalso)
+        self.assertEqual(juego.audio.llamadas, [])
 
     def test_inicio(self):
         # Valores por defecto

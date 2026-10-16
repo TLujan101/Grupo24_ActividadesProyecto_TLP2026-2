@@ -111,11 +111,13 @@ def instalar():
         setattr(modulo, nombre, globals()[nombre])
     sys.modules['Tkinter'] = modulo
 
-    # El mismo truco para el audio: los tests no van a hacer sonar nada, pero
-    # engine/game.py sigue importando el simbolo y ejecutando el mismo codigo.
-    modulo_audio = types.ModuleType('audio')
-    modulo_audio.GestorAudioNativo = AudioFalso
-    sys.modules['audio'] = modulo_audio
+    # El audio se sustituye donde el motor lo toma, no en sys.modules['audio']:
+    # engine/game.py hace un import RELATIVO (from .audio import ...), que
+    # resuelve a engine.audio y nunca consulta ese diccionario. Con el truco
+    # anterior los tests usaban el gestor REAL: sonaban, y cada juego creado
+    # abria una carpeta temporal que solo se borra al cerrar la ventana.
+    import engine.game
+    engine.game.GestorAudioNativo = AudioFalso
 
 
 class EventoFalso(object):
