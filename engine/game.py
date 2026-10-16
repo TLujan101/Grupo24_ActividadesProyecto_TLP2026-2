@@ -157,8 +157,19 @@ class Game(object):
 
     def iniciar_partida(self):
         self.aplicar_nivel()
+        self.musica_del_nivel()
         self.ejecutar_evento('ON_START')
         self.iniciado = True
+
+    def musica_del_nivel(self):
+        # Va ANTES de ON START a proposito: asi un PLAY_MUSIC del evento llega
+        # despues y pisa. El nivel pone la musica base, el evento la reemplaza.
+        # Y va aqui, y no en aplicar_nivel, porque aplicar_nivel corre en
+        # __init__: si pidiera la musica ahi, el tema del nivel inicial sonaria
+        # mientras el jugador todavia esta mirando el menu de eleccion.
+        cancion = self.nivel_config.get('music')
+        if cancion:
+            self.musica_brick(cancion)
 
     @staticmethod
     def etiqueta_nivel(nombre):

@@ -67,7 +67,19 @@ class Parser:
                 self.parsear_evento()
             else:
                 self.posicion += 1
+        self.validar_musicas_de_niveles()
         return self.ast
+
+    def validar_musicas_de_niveles(self):
+        # Va al FINAL del parse a proposito: asi el orden de los bloques da
+        # igual y una cancion puede declararse despues del LEVELS. Sin esto, un
+        # typo en el nombre dejaria el nivel mudo sin decir por que.
+        for nivel in self.ast['levels']:
+            cancion = nivel.get('music')
+            if cancion and cancion not in self.ast['songs']:
+                raise Exception("Error de sintaxis: el nivel '" + nivel['nombre'] +
+                                "' pide la cancion '" + cancion +
+                                "' pero no esta definida")
 
     def consumir(self, token_esperado=None):
         if self.posicion < len(self.tokens):
@@ -161,7 +173,7 @@ class Parser:
     # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
     # que la tecla 2 elegiria un nivel arbitrario.
 
-    MODIFICADORES_NIVEL = {'TICK': 'tick'}
+    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre')}
 
     def parsear_niveles(self):
         # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END
@@ -212,14 +224,23 @@ class Parser:
                             "' esta definido dos veces")
         nivel = {'nombre': nombre}
         while self.ver() not in (':', 'END', None):
-            clave = self.MODIFICADORES_NIVEL.get(self.ver())
-            if clave is None:
+            entrada = self.MODIFICADORES_NIVEL.get(self.ver())
+            if entrada is None:
                 # Un modificador desconocido se reporta, nunca se ignora: si se
                 # pasara, el nivel arrancaria con el default sin avisar.
                 raise Exception("Error de sintaxis: modificador desconocido '" +
                                 str(self.ver()) + "' en el nivel '" + nombre + "'")
             self.consumir()
-            nivel[clave] = self.consumir_decimal()
+            clave, tipo = entrada
+            # TICK toma un real y MUSIC un identificador: por eso la tabla
+            # guarda el tipo. Sin esto, float('TEMA_CALMO') reventaria.
+            if tipo == 'real':
+                nivel[clave] = self.consumir_decimal()
+            else:
+                if self.ver() is None or self.ver() == 'END':
+                    raise Exception("Error de sintaxis: se esperaba el nombre de la "
+                                    "cancion del nivel '" + nombre + "'")
+                nivel[clave] = self.consumir()
         self.consumir('END')
         if 'tick' in nivel and not (0 < nivel['tick'] < INFINITO):
             # La comparacion sola no alcanza: en py2 nan <= 0 es False y

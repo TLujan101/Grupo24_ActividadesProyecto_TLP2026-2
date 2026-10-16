@@ -128,6 +128,39 @@ class TestParserNiveles(unittest.TestCase):
                 compilar(fuente)
             self.assertIn(esperado, str(contexto.exception))
 
+    def test_modificador_music(self):
+        # MUSIC toma un identificador, no un decimal como TICK: la tabla de
+        # modificadores tiene que distinguir los dos tipos de valor.
+        fuente = ('DEFINE SONG TEMA_CALMO:\n  NOTE C5 440\nEND\n'
+                  'DEFINE SONG TEMA_NYAN:\n  NOTE E5 440\nEND\n'
+                  'LEVELS:\n'
+                  '  LEVEL BABY:\n    MUSIC TEMA_CALMO\n  END\n'
+                  '  LEVEL NYAN_CAT:\n    TICK 0.06\n    MUSIC TEMA_NYAN\n  END\n'
+                  'END\n')
+        ast = compilar(fuente)
+        self.assertEqual(ast['levels'],
+                         [{'nombre': 'BABY', 'music': 'TEMA_CALMO'},
+                          {'nombre': 'NYAN_CAT', 'tick': 0.06, 'music': 'TEMA_NYAN'}])
+
+    def test_music_exige_nombre(self):
+        with self.assertRaises(Exception) as contexto:
+            compilar('LEVELS:\n  LEVEL BABY:\n    MUSIC\n  END\nEND\n')
+        self.assertIn("se esperaba el nombre de la cancion", str(contexto.exception))
+
+    def test_music_debe_nombrar_una_cancion_declarada(self):
+        # El motor tolera un nombre inexistente (suena mudo), pero aqui se
+        # rechaza: un typo en el nombre dejaria el nivel mudo sin decir por que.
+        # Se comprueba al final del parse, asi que el orden de los bloques da
+        # igual: la cancion puede declararse DESPUES del LEVELS.
+        fuente = ('LEVELS:\n  LEVEL BABY:\n    MUSIC TEMA_CALMO\n  END\nEND\n'
+                  'DEFINE SONG TEMA_CALMO:\n  NOTE E5 440\nEND\n')
+        self.assertEqual(compilar(fuente)['levels'][0]['music'], 'TEMA_CALMO')
+
+        with self.assertRaises(Exception) as contexto:
+            compilar('LEVELS:\n  LEVEL BABY:\n    MUSIC TEMA_X\n  END\nEND\n')
+        self.assertIn("pide la cancion 'TEMA_X' pero no esta definida",
+                      str(contexto.exception))
+
     def test_el_orden_de_los_niveles_sobrevive_al_json(self):
         # Razon de ser de que levels sea lista y no dict: en py2.7 un dict
         # pierde el orden de declaracion al pasar por JSON, y el menu se

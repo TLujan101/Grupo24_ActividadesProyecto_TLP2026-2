@@ -304,5 +304,82 @@ class TestMenuNiveles(unittest.TestCase):
         self.assertEqual(juego.acciones, [('MOVE', 'UP')])
 
 
+class TestMusicaPorNivel(unittest.TestCase):
+    # El doble de audio registra ('musica', firma), donde firma es el MD5 de la
+    # partitura, no el nombre de la cancion: los tests comparan contra la misma
+    # firma que calcula tracker.
+
+    CALMO = {'notas': [[523.3, 400]]}
+    NYAN = {'notas': [[659.3, 400]]}
+
+    def firma(self, cancion):
+        from engine import tracker
+        return tracker.firma_partitura(cancion['notas'])
+
+    def niveles_con_musica(self, inicio='BABY', eventos=None):
+        niveles = [{'nombre': 'BABY', 'tick': 0.15, 'music': 'TEMA_CALMO'},
+                   {'nombre': 'NYAN_CAT', 'tick': 0.06, 'music': 'TEMA_NYAN'}]
+        datos_juego = datos_niveles(niveles, inicio, eventos)
+        datos_juego['songs'] = {'TEMA_CALMO': self.CALMO, 'TEMA_NYAN': self.NYAN}
+        return datos_juego
+
+    def un_nivel_con_musica(self, inicio='BABY', eventos=None):
+        # Un SOLO nivel: asi no hay menu y la partida arranca sola en __init__,
+        # que es lo que quieren estos dos casos.
+        datos_juego = datos_niveles([{'nombre': 'BABY', 'tick': 0.15,
+                                      'music': 'TEMA_CALMO'}], inicio, eventos)
+        datos_juego['songs'] = {'TEMA_CALMO': self.CALMO, 'TEMA_NYAN': self.NYAN}
+        return datos_juego
+
+    def test_el_nivel_arranca_su_cancion(self):
+        juego = JuegoPrueba(self.un_nivel_con_musica('BABY'))
+        self.assertTrue(juego.iniciado)
+        self.assertEqual(juego.audio.llamadas,
+                         [('musica', self.firma(self.CALMO))])
+
+    def test_el_menu_no_suena_nada(self):
+        # La musica del nivel se pide al INICIAR LA PARTIDA, no al construir el
+        # juego: si se pidiera dentro de aplicar_nivel (que corre en __init__),
+        # el tema del nivel inicial sonaria mientras el jugador mira los botones.
+        datos_juego = self.niveles_con_musica('NYAN_CAT')
+        del datos_juego['levels'][1]['tick']
+        juego = JuegoPrueba(datos_juego)
+        self.assertFalse(juego.iniciado)
+        self.assertEqual(juego.audio.llamadas, [])   # menu en silencio
+        juego.manejar_input_gui(EventoFalso('1'))
+        self.assertEqual(juego.audio.llamadas,
+                         [('musica', self.firma(self.CALMO))])
+
+    def test_elige_otro_nivel_suena_otro_tema(self):
+        juego = JuegoPrueba(self.niveles_con_musica('BABY'))
+        juego.audio.llamadas = []
+        juego.manejar_input_gui(EventoFalso('2'))
+        self.assertEqual(juego.audio.llamadas,
+                         [('musica', self.firma(self.NYAN))])
+
+    def test_play_music_del_evento_manda_sobre_el_del_nivel(self):
+        # La musica del nivel se pide ANTES de ON START, asi que un PLAY_MUSIC
+        # del evento llega despues y pisa. Es la precedencia sin regla nueva:
+        # el nivel pone la musica base, el evento puede sobrescribirla.
+        eventos = {'ON_START': [{'accion': 'PLAY_MUSIC', 'objeto': 'TEMA_NYAN',
+                                 'params': []}]}
+        juego = JuegoPrueba(self.un_nivel_con_musica('BABY', eventos))
+        self.assertEqual(juego.audio.musica_actual, self.firma(self.NYAN))
+
+    def test_nivel_sin_musica_no_pide_nada(self):
+        datos_juego = datos_niveles([{'nombre': 'BABY'}, {'nombre': 'NYAN_CAT'}],
+                                    'BABY')
+        datos_juego['songs'] = {'TEMA_CALMO': self.CALMO}
+        juego = JuegoPrueba(datos_juego)
+        self.assertEqual(juego.audio.llamadas, [])
+
+    def test_cancion_inexistente_no_revienta(self):
+        # El motor la tolera (suena mudo); el compilador es quien avisa.
+        datos_juego = self.niveles_con_musica('BABY')
+        datos_juego['levels'][0]['music'] = 'NO_EXISTE'
+        juego = JuegoPrueba(datos_juego)
+        self.assertEqual(juego.audio.llamadas, [])
+
+
 if __name__ == '__main__':
     unittest.main()
