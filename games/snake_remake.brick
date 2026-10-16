@@ -1,4 +1,7 @@
-# snake.brick
+# snake_remake.brick
+# Actividad 4 - Seccion C: niveles de dificultad desde la gramatica.
+# Los tres niveles se diferencian solo en la velocidad del tick. Las frutas
+# venenosas, las nubes y la geometria llegan en las secciones B y A.
 GAME_TYPE SNAKE
 
 GAME_GRID (18, 18)
@@ -7,6 +10,24 @@ GAME_GRID (18, 18)
 DEFINE SHAPE PIXEL:
   STATE 1:
     [1]
+END
+
+# --- Niveles ---
+# START fija el nivel con el que arranca si el jugador no elige otro. El motor
+# no sabe que existe un nivel llamado NYAN_CAT: solo obedece lo que este bloque
+# declara. En pantalla se muestran como '1. Baby', '2. Entusiasta' y
+# '3. Nyan Cat', y se pueden elegir con clic o con las teclas 1, 2 y 3.
+LEVELS:
+  START: NYAN_CAT
+  LEVEL BABY:
+    TICK 0.15
+  END
+  LEVEL ENTUSIASTA:
+    TICK 0.10
+  END
+  LEVEL NYAN_CAT:
+    TICK 0.06
+  END
 END
 
 # --- Logica y Reglas ---

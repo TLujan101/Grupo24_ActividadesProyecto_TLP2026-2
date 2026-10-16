@@ -61,6 +61,45 @@ class TestJuegosReales(unittest.TestCase):
                 juego.manejar_tecla(random.choice(teclas).upper())
                 juego.game_loop()
 
+    def test_snake_remake_abre_menu_y_arranca_al_elegir(self):
+        # snake_remake.brick declara tres niveles: la partida no arranca sola y
+        # el jugador elige con una tecla o con un clic. snake.brick (clasico)
+        # no hace esto.
+        random.seed(1234)
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
+        self.assertEqual(datos_juego['config']['start_level'], 'NYAN_CAT')
+        self.assertEqual([n['nombre'] for n in datos_juego['levels']],
+                         ['BABY', 'ENTUSIASTA', 'NYAN_CAT'])
+
+        juego = crear_juego(datos_juego)
+        self.assertFalse(juego.iniciado)
+        self.assertEqual(juego.serpiente_cuerpo, [])
+        juego.run()                                   # abre el menu
+        self.assertEqual([b.opciones['text'] for b in juego.botones_nivel],
+                         ['1. Baby', '2. Entusiasta', '3. Nyan Cat'])
+
+        juego.botones_nivel[1].opciones['command']()  # clic en Entusiasta
+        self.assertTrue(juego.iniciado)
+        self.assertEqual(juego.nivel_actual, 'ENTUSIASTA')
+        self.assertEqual(juego.velocidad_gravedad, 0.1)
+        self.assertEqual(len(juego.serpiente_cuerpo), 1)   # ON_START corrio
+        self.assertIsNotNone(juego.posicion_comida)
+
+        # Y la partida corre normal desde ahi
+        for _ in range(30):
+            juego.manejar_tecla(random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT']))
+            juego.game_loop()
+
+    def test_snake_clasico_no_abre_menu(self):
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake.brick'))
+        self.assertEqual(datos_juego['config']['start_level'], 'BABY')
+        juego = crear_juego(datos_juego)
+        self.assertTrue(juego.iniciado)      # arranca solo, como siempre
+        self.assertEqual(juego.velocidad_gravedad, 0.15)
+        juego.run()
+        self.assertEqual(juego.botones_nivel, [])
+        self.assertEqual(juego.root.afters, [(50, juego.game_loop)])
+
 
 class TestRuntime(unittest.TestCase):
 

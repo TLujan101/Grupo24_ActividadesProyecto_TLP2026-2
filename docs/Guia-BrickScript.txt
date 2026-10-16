@@ -56,6 +56,35 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
     (por defecto CYAN) y la probabilidad de aparecer (por defecto 10):
     Ej: DEFINE SHAPE T_PIEZA COLOR PURPLE CHANCE 10: STATE 1: [0,1,0][1,1,1][0,0,0] END
 
+* LEVELS: ... END
+    Bloque opcional que declara los niveles de dificultad del juego. Cada nivel
+    lleva sus modificadores; START indica con cual arranca la partida.
+
+    Ej: LEVELS:
+          START: NYAN_CAT
+          LEVEL BABY:
+            TICK 0.15
+          END
+          LEVEL NYAN_CAT:
+            TICK 0.06
+          END
+        END
+
+    - TICK <real>: segundos entre cada tick del juego. Si un nivel no lo declara,
+      el juego conserva su velocidad por defecto (Snake 0.15, Tetris 0.4).
+    - START: <nombre>: nivel con el que arranca la partida. Sin START se usa el
+      primer nivel declarado.
+    - Los nombres de nivel se escriben en MAYUSCULAS porque el lexer solo
+      reconoce identificadores en mayusculas.
+    - Si el archivo no declara LEVELS, el motor asume el nivel BABY con la
+      configuracion por defecto del juego. Por eso los .brick clasicos siguen
+      funcionando sin cambios.
+
+    Cuando el archivo declara dos o mas niveles, el juego muestra un menu de
+    botones antes de empezar. Cada boton se puede hacer clic o elegir con su
+    numero (1, 2, 3...) segun el orden en que estan declarados los niveles. El
+    texto del boton sale del nombre: NYAN_CAT se muestra como 'Nyan Cat'.
+
 --- SINTAXIS PARA TETRIS ---
 
 Eventos disponibles: ON START, ON TICK, ON LINE_CLEAR, ON KEY_UP, ON KEY_DOWN, ON KEY_LEFT, ON KEY_RIGHT
