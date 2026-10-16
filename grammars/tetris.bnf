@@ -1,8 +1,9 @@
-<programa> ::= <tipo_juego> <grid> <definiciones> <eventos>
+<programa> ::= <tipo_juego> <grid> <definiciones> <opcional_niveles> <eventos>
 
 <tipo_juego> ::= "GAME_TYPE" "TETRIS"
 <grid>       ::= "GAME_GRID" "(" <numero> "," <numero> ")"
 <definiciones> ::= <definicion> | <definicion> <definiciones>
+<opcional_niveles> ::= "" | <niveles>
 <definicion>   ::= <definicion_shape> | <definicion_cancion> | <definicion_efecto>
 <eventos>    ::= <evento> | <evento> <eventos>
 
@@ -35,7 +36,24 @@
 <letra_a_g>   ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
 
 <direccion>     ::= "LEFT" | "RIGHT" | "DOWN"
+
+* --- Niveles de dificultad (opcional) ---
+*
+* El parser es compartido con grammars/snake.bnf: la regla vive en las dos.
+* levels es una lista en el AST, no un diccionario: el menu se numera por
+* posicion y en Python 2.7 un dict no conserva el orden de declaracion.
+*
+* <real> es un token unico para el lexer: 0.15 llega como un solo token.
+
+<niveles>          ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
+<elegir_nivel>     ::= "" | "START" ":" <identificador>
+<definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
+<definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
+<modificadores_nivel> ::= <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
+<modificador_nivel> ::= "TICK" <real>
+
 <identificador> ::= <letra> | <letra> <identificador>
 <numero>        ::= <digito> | <digito> <numero>
+<real>          ::= <numero> | <numero> "." <numero>
 <letra>         ::= "A"..."Z" | "_"
 <digito>        ::= "0"..."9"

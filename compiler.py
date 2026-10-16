@@ -22,11 +22,23 @@ def lexer(codigo_fuente):
     return tokens
 
 class Parser:
+    # El nivel por defecto existe siempre: si el .brick no declara LEVELS se
+    # queda este. Solo es una etiqueta, no lleva comportamiento asociado; los
+    # valores por defecto de cada modificador los aporta el juego, no el
+    # compilador (Tetris y Snake tienen ticks distintos y el compilador es uno
+    # solo para los dos).
+    NIVEL_POR_DEFECTO = 'BABY'
+
     def __init__(self, tokens):
         self.tokens = tokens
         self.posicion = 0
-        self.ast = {"tipo_juego": None, "config": {}, "shapes": {},
-                    "songs": {}, "effects": {}, "events": {}}
+        self.ast = {"tipo_juego": None,
+                    "config": {"start_level": self.NIVEL_POR_DEFECTO},
+                    "shapes": {}, "songs": {}, "effects": {}, "events": {},
+                    "levels": [{"nombre": self.NIVEL_POR_DEFECTO}]}
+        # True mientras levels sea el BABY materializado y no uno del .brick:
+        # asi un nivel llamado BABY no choca con el default.
+        self.niveles_es_default = True
 
     def parse(self):
         while self.posicion < len(self.tokens):
@@ -45,6 +57,8 @@ class Parser:
                     self.parsear_efecto()
                 else:
                     self.parsear_shape()
+            elif token_actual == 'LEVELS':
+                self.parsear_niveles()
             elif token_actual == 'ON':
                 self.parsear_evento()
             else:
@@ -76,6 +90,17 @@ class Parser:
             raise Exception("Error de sintaxis: se esperaba un numero pero se llego al final del archivo.")
         try:
             return int(token)
+        except ValueError:
+            raise Exception("Error de sintaxis: se esperaba un numero pero se encontro '" + token + "'")
+
+    def consumir_decimal(self):
+        # El lexer entrega 0.15 como un solo token (ver token_regex), asi que
+        # este es el unico punto del parser que acepta decimales.
+        token = self.consumir()
+        if token is None:
+            raise Exception("Error de sintaxis: se esperaba un numero pero se llego al final del archivo.")
+        try:
+            return float(token)
         except ValueError:
             raise Exception("Error de sintaxis: se esperaba un numero pero se encontro '" + token + "'")
 
@@ -124,6 +149,75 @@ class Parser:
             estados.append(matriz)
         self.consumir('END')
         self.ast['shapes'][nombre_shape] = {"estados": estados, "color": color_shape, "chance": chance_shape}
+
+    # NIVELES
+    # --------
+    #
+    # levels es una LISTA y no un diccionario a proposito: el menu se numera por
+    # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
+    # que la tecla 2 elegiria un nivel arbitrario.
+
+    MODIFICADORES_NIVEL = {'TICK': 'tick'}
+
+    def parsear_niveles(self):
+        # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END
+        self.consumir('LEVELS')
+        self.consumir(':')
+
+        inicio = None
+        if self.ver() == 'START':
+            self.consumir('START')
+            self.consumir(':')
+            inicio = self.consumir()
+
+        niveles = []
+        # El nivel por defecto (BABY) NO cuenta como nombre ya declarado: un
+        # .brick puede declarar perfectamente un nivel llamado BABY. Los de un
+        # bloque LEVELS anterior si cuentan.
+        vistos = [] if self.niveles_es_default else [n['nombre'] for n in self.ast['levels']]
+        while self.ver() == 'LEVEL':
+            nivel = self.parsear_nivel(vistos)
+            vistos.append(nivel['nombre'])
+            niveles.append(nivel)
+        if not niveles:
+            raise Exception("Error de sintaxis: LEVELS no declara ningun nivel")
+        self.consumir('END')
+
+        # Sin START arranca el primer nivel declarado, que es el orden del
+        # .brick. El default BABY es del caso "no hay bloque LEVELS", y ese se
+        # resuelve en __init__.
+        if inicio is None:
+            inicio = niveles[0]['nombre']
+        if inicio not in [n['nombre'] for n in niveles]:
+            raise Exception("Error de sintaxis: el nivel inicial '" + str(inicio) +
+                            "' no esta definido")
+        # Sin START, arranca el primer nivel declarado (el orden del .brick).
+        self.ast['levels'] = niveles
+        self.ast['config']['start_level'] = inicio
+        self.niveles_es_default = False
+
+    def parsear_nivel(self, vistos):
+        self.consumir('LEVEL')
+        nombre = self.consumir()
+        self.consumir(':')
+        if nombre in vistos:
+            raise Exception("Error de sintaxis: el nivel '" + nombre +
+                            "' esta definido dos veces")
+        nivel = {'nombre': nombre}
+        while self.ver() not in (':', 'END', None):
+            clave = self.MODIFICADORES_NIVEL.get(self.ver())
+            if clave is None:
+                # Un modificador desconocido se reporta, nunca se ignora: si se
+                # pasara, el nivel arrancaria con el default sin avisar.
+                raise Exception("Error de sintaxis: modificador desconocido '" +
+                                str(self.ver()) + "' en el nivel '" + nombre + "'")
+            self.consumir()
+            nivel[clave] = self.consumir_decimal()
+        self.consumir('END')
+        if 'tick' in nivel and nivel['tick'] <= 0:
+            raise Exception("Error de sintaxis: TICK del nivel '" + nombre +
+                            "' debe ser mayor que 0")
+        return nivel
 
 
     # AUDIO DECLARADO EN EL .BRICK

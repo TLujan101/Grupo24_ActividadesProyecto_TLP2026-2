@@ -1,11 +1,13 @@
-<programa> ::= <tipo_juego> <grid> <definiciones> <eventos>
+<programa> ::= <tipo_juego> <grid> <definiciones> <opcional_niveles> <eventos>
 
 <tipo_juego> ::= "GAME_TYPE" "SNAKE"
 <grid>       ::= "GAME_GRID" "(" <numero> "," <numero> ")"
 <definiciones> ::= <definicion_shape> | <definicion_shape> <definiciones>
+<opcional_niveles> ::= "" | <niveles>
 <eventos>    ::= <evento> | <evento> <eventos>
 
-<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> ":" <estados> "END"
+<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <extras> ":" <estados> "END"
+<extras> ::= "" | "COLOR" <identificador> | "CHANCE" <numero> | "COLOR" <identificador> "CHANCE" <numero>
 <estados>          ::= <estado> | <estado> <estados>
 <estado>           ::= "STATE" <numero> ":" <matriz>
 <matriz>           ::= <fila> | <fila> <matriz>
@@ -27,7 +29,24 @@
 
 <coordenadas>   ::= "(" <numero> "," <numero> ")"
 <direccion>     ::= "UP" | "DOWN" | "LEFT" | "RIGHT"
+
+* --- Niveles de dificultad (opcional) ---
+*
+* levels es una lista en el AST, no un diccionario: el menu se numera por
+* posicion y en Python 2.7 un dict no conserva el orden de declaracion.
+*
+* <real> es un token unico para el lexer: 0.15 llega como un solo token, no
+* como un entero seguido de un punto.
+
+<niveles>          ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
+<elegir_nivel>     ::= "" | "START" ":" <identificador>
+<definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
+<definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
+<modificadores_nivel> ::= <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
+<modificador_nivel> ::= "TICK" <real>
+
 <identificador> ::= <letra> | <letra> <identificador>
 <numero>        ::= <digito> | <digito> <numero>
+<real>          ::= <numero> | <numero> "." <numero>
 <letra>         ::= "A"..."Z" | "_"
 <digito>        ::= "0"..."9"
