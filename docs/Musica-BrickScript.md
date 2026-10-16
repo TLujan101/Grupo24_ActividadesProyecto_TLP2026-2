@@ -113,8 +113,14 @@ La cuenta es la afinación estándar (fórmula MIDI):
 ```python
 NOTAS_SEMITONO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
-def nota_a_hz(self, letra, octava):
-    midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra]
+def nota_a_hz(self, token):
+    letra = token[0]
+    semitono = self.NOTAS_SEMITONO[letra]
+    resto = token[1:]
+    if resto.startswith('#'):
+        semitono += 1      # D# es la misma letra un semitono mas arriba
+        resto = resto[1:]
+    midi = 12 * (int(resto) + 1) + semitono
     return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
 ```
 
@@ -124,7 +130,8 @@ Y así queda:
 |---|---|
 | `A4` | 440.0 Hz |
 | `C5` | 523.3 Hz |
-| `E5` | 659.3 Hz |
+| `D4` | 293.7 Hz |
+| `D#4` | 311.1 Hz |
 | `E6` | 1318.5 Hz |
 
 (A4 = 440 Hz es la definición de afinación; de ahí sale toda la tabla.)
@@ -440,9 +447,32 @@ cada uno tiene su alias MCI. Resultado: un efecto no interrumpe la música.
 El juego sigue funcionando, solo que mudo. `audio.py` detecta qué reproductor hay
 al arrancar y, si no encuentra ninguno, avisa por `stderr` y sigue sin sonido.
 
-**¿Se pueden usar sostenidos (`C#4`)?**
-No en esta versión. El lexer trata `#` como inicio de comentario, así que `C#4`
-se leería como `C4`. Es una limitación conocida, deliberada por ahora.
+**¿Se pueden usar sostenidos (`D#4`)?**
+
+Sí. Para que `#` siga siendo el inicio de un comentario pero también sirva
+como sostenido, la regla del lexer mira lo que tiene **delante**:
+
+```python
+codigo_fuente = re.sub(r'(?<![A-G])#.*', '', codigo_fuente)   # era: r'#.*'
+token_regex = r'\b[A-G]#?[0-9]+\b|\b[A-Z_]+\b|\d+(?:\.\d+)?|[\[\](),:]'
+```
+
+Un `#` precedido por una letra de nota (`D#4`) no abre comentario; cualquier
+otro `#` sí. Antes, `NOTE D#4 200` se convertía en `['NOTE', 'D']`: el `#` se
+comía el resto de la línea, incluida la duración.
+
+En el compilador, el sostenido suma un semitono:
+
+```python
+midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra] + (1 if sostenido else 0)
+```
+
+Comprobación: `D4` son 293.7 Hz, `D#4` son 311.1 Hz, que es `2^(1/12)` veces
+293.7 — exactamente la razón de un semitono.
+
+El único caso que esta regla rompe es un comentario con un `#` pegado a una
+letra sin cifra detrás (`ver la nota A# es importante`), que antes funcionaba.
+Es un caso raro y el mensaje de error lo señala.
 
 ---
 

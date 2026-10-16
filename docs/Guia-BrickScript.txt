@@ -90,6 +90,12 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
     texto del boton sale del nombre: NYAN_CAT se muestra como 'Nyan Cat'.
 
 * ACCIONES DE SONIDO (en cualquier evento)
+    Una cancion se declara con DEFINE SONG <nombre> y cada nota con
+    NOTE <nota> <ms>, donde la nota es letra A-G, opcional #, y la octava:
+    NOTE E5 440, NOTE D#4 200. El sostenido suena un semitono mas agudo y su
+    # no abre comentario, porque va pegado a la letra. Un efecto se declara
+    igual pero con DEFINE EFFECT, y suena una vez sin cortar la musica.
+
     PLAY_MUSIC <cancion>   arranca la cancion en bucle
     PLAY_EFFECT <efecto>   suena una vez y NO corta la musica
     STOP_MUSIC             corta la musica

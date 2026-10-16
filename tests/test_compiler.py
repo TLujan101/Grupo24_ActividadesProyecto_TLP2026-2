@@ -30,6 +30,39 @@ class TestLexer(unittest.TestCase):
                          ['LEVEL', 'NYAN_CAT', ':'])
         self.assertRaises(Exception, compiler.lexer, 'LEVEL Enthusiasta:')
 
+    def test_notas_acentuadas(self):
+        # Un '#' precedido por letra A-G no abre comentario: si lo abriera, se
+        # comia el resto de la linea y se perdia la duracion.
+        self.assertEqual(compiler.lexer('NOTE D#4 200'), ['NOTE', 'D#4', '200'])
+        # ... y los comentarios de verdad siguen funcionando
+        self.assertEqual(compiler.lexer('# comentario'), [])
+        self.assertEqual(compiler.lexer('NOTE C4 200 # cola'), ['NOTE', 'C4', '200'])
+        self.assertEqual(compiler.lexer('# --- Niveles ---'), [])
+        self.assertEqual(compiler.lexer('TICK 0.15 # el tick'), ['TICK', '0.15'])
+
+    def test_nota_acentuada_esta_un_semitono_arriba(self):
+        ast = compilar('DEFINE SONG X:\n  NOTE D4 200\n  NOTE D#4 200\nEND\n')
+        natural, acentuada = (n[0] for n in ast['songs']['X']['notas'])
+        # D# es la misma letra un semitono mas arriba: la razonancia de dos
+        # vezes la frecuencia de la octava.
+        self.assertAlmostEqual(acentuada / natural, 2 ** (1.0 / 12.0), places=3)
+
+    def test_nota_invalida_falla_en_voz_alta(self):
+        # Una letra que no es nota la rechaza el LEXER, antes de que el parser
+        # la vea: H4 no matchea el patron de nota, asi que la H queda en 'resto'.
+        # El mensaje lo dice el lexer, no el parser.
+        with self.assertRaises(Exception) as contexto:
+            compilar('DEFINE SONG X:\n  NOTE H4 200\nEND\n')
+        self.assertIn("H", str(contexto.exception))
+
+    def test_sostenido_sin_octava_lo_corta_el_lexer(self):
+        # NOTA: la validacion de nota_a_hz es defensa en profundidad y no se
+        # puede alcanzar desde el lexer, que solo produce tokens con la forma
+        # [A-G]#?[0-9]+. Un sostenido sin octava lo rechaza el lexer.
+        with self.assertRaises(Exception) as contexto:
+            compilar('DEFINE SONG X:\n  NOTE D# 200\nEND\n')
+        self.assertIn("'#'", str(contexto.exception))
+
     def test_cadena_con_comentarios_y_decimales(self):
         fuente = '# velocidad\nLEVEL BABY:\n  TICK 0.15\nEND'
         self.assertEqual(compiler.lexer(fuente),

@@ -13,12 +13,15 @@ import json
 INFINITO = float('inf')
 
 def lexer(codigo_fuente):
-    codigo_fuente = re.sub(r'#.*', '', codigo_fuente)
-    # Un nombre de nota (E5, A4, G3) es un token propio: si no, el lexer
+    # Un '#' precedido por letra A-G no abre comentario: es el sostenido de una
+    # nota (D#4). Si lo abriera, se comia el resto de la linea y con ella la
+    # duracion de la nota.
+    codigo_fuente = re.sub(r'(?<![A-G])#.*', '', codigo_fuente)
+    # Un nombre de nota (E5, D#4) es un token propio: si no, el lexer
     # partia "E5" en "E" y "5" y la nota se colaba como texto no reconocido.
     # El grupo de decimales va pegado al de enteros: suelto, \d+ se comia el 0
     # de 0.15 y el punto caia en resto como caracter no reconocido.
-    token_regex = r'\b[A-G][0-9]+\b|\b[A-Z_]+\b|\d+(?:\.\d+)?|[\[\](),:]'
+    token_regex = r'\b[A-G]#?[0-9]+\b|\b[A-Z_]+\b|\d+(?:\.\d+)?|[\[\](),:]'
     tokens = re.findall(token_regex, codigo_fuente)
     resto = re.sub(token_regex, '', codigo_fuente)
     if resto.strip():
@@ -263,8 +266,22 @@ class Parser:
 
     NOTAS_SEMITONO = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
-    def nota_a_hz(self, letra, octava):
-        midi = 12 * (octava + 1) + self.NOTAS_SEMITONO[letra]
+    def nota_a_hz(self, token):
+        # Recibe el token completo: 'E5', 'D4' o 'D#4'. El sostenido suma un
+        # semitono, asi que D#4 es la misma letra de D4 un semitono mas arriba.
+        letra = token[0]
+        if letra not in self.NOTAS_SEMITONO:
+            raise Exception("Error de sintaxis: nota '" + token +
+                            "' no valida (use A-G, opcional # y la octava, ej. E5 o D#4)")
+        semitono = self.NOTAS_SEMITONO[letra]
+        resto = token[1:]
+        if resto.startswith('#'):
+            semitono += 1
+            resto = resto[1:]
+        if not resto.isdigit():
+            raise Exception("Error de sintaxis: nota '" + token +
+                            "' no valida (use A-G, opcional # y la octava, ej. E5 o D#4)")
+        midi = 12 * (int(resto) + 1) + semitono
         return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
 
     def parsear_cancion(self):
@@ -292,12 +309,8 @@ class Parser:
             token_nota = self.consumir()
             if token_nota is None:
                 raise Exception("Error de sintaxis: NOTE sin nombre antes del fin del archivo.")
-            letra, octava = token_nota[0], token_nota[1:]
-            if letra not in self.NOTAS_SEMITONO or not octava.isdigit():
-                raise Exception("Error de sintaxis: nota '" + token_nota +
-                                "' no valida (use A-G mas octava, ej. E5)")
             ms = self.consumir_numero()
-            notas.append([self.nota_a_hz(letra, int(octava)), ms])
+            notas.append([self.nota_a_hz(token_nota), ms])
         return notas
 
 
