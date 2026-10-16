@@ -674,7 +674,7 @@ DEFINE SONG TEMA_NYAN WAVE SQUARE:
 END
 ```
 
-Tetris sigue con `SINE` (suena suave, que era lo queijahEa bien) y Nyan usa
+Tetris sigue con `SINE` (suena suave, que era lo que le venía bien) y Nyan usa
 `SQUARE`. Cada canción elige su timbre.
 
 ### Un detalle: la cuadrada no se rectifica
@@ -713,6 +713,82 @@ return hashlib.md5(repr((onda, notas)).encode('utf-8')).hexdigest()[:12]
 
 Para comprobar que la senoidal no se había movido, se comparó el PCM del tema de
 Tetris antes y después del cambio: **620 928 bytes, idéntico byte a byte**.
+
+---
+
+## 14. Codificar una partitura: la rejilla y los silencios
+
+Cuando además del tono llega el **ritmo** —una rejilla con guiones—, el silencio
+deja de ser una curiosidad y pasa a ser la mitad del trabajo: de las 286
+posiciones de una melodía de 11 compases, **185 eran silencio**.
+
+### La rejilla
+
+La partitura es una rejilla de **26 slots por compás**, y cada slot es un paso de
+la misma duración:
+
+```
+5|----------CDC-----------C-|
+5|-CDFGDFCD-C-D-F-GDFCD-dDdC|
+5|dC----C-d-dC-CDFGDFCD-C-D-|
+```
+
+Cada posición es **una letra o un guion**:
+
+- letra → una nota de `SLOT_MS`
+- guion → `NOTE REST SLOT_MS`
+- **varios slots con la misma letra seguidos** → una sola nota de `SLOT_MS × n`
+- **varios guiones seguidos** → un solo `REST` de `SLOT_MS × n`
+
+El último caso es la clave: los silencios se **agrupan**. Sin agrupar, once
+guiones seguidos darían once `REST 60` idénticos en el `.brick` en vez de un
+`REST 660` limpio. El `.brick` resultante tiene 97 notas y 42 silencios en vez
+de 101 y 185: se ve mejor y suena igual.
+
+### Dos voces, y aquí solo hay una
+
+El análisis dio dos capas:
+
+```
+voz 4   114 notas  (59 de ellas son 'b')   → bordón grave: es el bajo
+voz 5   101 notas, 11 compases             → la melodía
+```
+
+La voz 4 es el bajo porque 59 de sus 114 notas son la misma letra: eso es un
+bordón, no una melodía. Y la melodía es la 5 porque tiene un compás más, y ese
+compás final es suyo solo — una nota sostenida, que es como termina una
+melodía.
+
+**El lenguaje tiene una sola voz**: `tracker.sintetizar()` recorre `notas`, una
+lista plana, secuencialmente. No hay forma de tocar melodía y bajo a la vez.
+Por eso el tema no suena igual por más fiel que sea la melodía: **le falta una
+parte entera**, y no es un detalle de afinación.
+
+Hacerlo bien exigiría polifonía: dos listas sumadas muestra a muestra.
+
+### La octava, que la partitura no trae
+
+La voz 5 mezcla `D` (29 veces) y `d` (9 veces), la misma letra en dos cajas.
+Tomarlas como dos octavas produce saltos de **quintadecimas** dentro de una
+frase, que no es música. La lectura que sí funciona es que **la caja no
+significa octava**: ignorada, la melodía queda en Do mayor pentatónico
+(`C D E F G`), que es exactamente lo que usa una melodita alegre de 8 bits.
+
+Y dentro de una sola octava. Un primer intento elegía para cada nota «la octava
+más cercana a la anterior», pero en música temperada los intervalos no son
+simétricos alrededor de una nota, así que metía una `F4` entre dos `C5`. Para
+una pentatónica, lo simple es lo correcto.
+
+### Los dos botones que controlan todo
+
+Una vez leída la rejilla, la melodía entera se controla con dos números:
+
+| Parámetro | Qué cambia |
+|---|---|
+| `SLOT_MS` | el tempo. 60 ms da un tema de 17.2 s |
+| la octava fija | dónde cae la línea melódica |
+
+Cambiar el tempo es cambiar un número, ni una nota.
 
 ---
 
