@@ -719,8 +719,8 @@ Tetris antes y después del cambio: **620 928 bytes, idéntico byte a byte**.
 ## 14. Codificar una partitura: la rejilla y los silencios
 
 Cuando además del tono llega el **ritmo** —una rejilla con guiones—, el silencio
-deja de ser una curiosidad y pasa a ser la mitad del trabajo: de las 286
-posiciones de una melodía de 11 compases, **185 eran silencio**.
+deja de ser una curiosidad y pasa a ser la mitad del trabajo: de las 312
+posiciones de la melodía de 12 compases, **casi la mitad son silencio**.
 
 ### La rejilla
 
@@ -742,42 +742,22 @@ Cada posición es **una letra o un guion**:
 
 El último caso es la clave: los silencios se **agrupan**. Sin agrupar, once
 guiones seguidos darían once `REST 60` idénticos en el `.brick` en vez de un
-`REST 660` limpio. El `.brick` resultante tiene 97 notas y 42 silencios en vez
-de 101 y 185: se ve mejor y suena igual.
+`REST 660` limpio. El `.brick` resultante tiene 166 eventos en vez de 312
+slots: se ve mejor y suena igual.
 
-### Dos voces, y aquí solo hay una
+### La caja sí significa algo: sostenidos
 
-El análisis dio dos capas:
+La guía de la partitura dice que las minúsculas son naturales y las
+mayúsculas `A/C/D/F/G` son sostenidos. Ignorar la caja era un error: la
+melodía no es pentatónica en Do mayor, sino una línea cromática con `D5` y
+`E5` naturales más `C#5`, `D#5`, `F#5` y `G#5`. Por eso el `.brick` usa
+sostenidos (`NOTE C#5 60`), que el lexer ya acepta.
 
-```
-voz 4   114 notas  (59 de ellas son 'b')   → bordón grave: es el bajo
-voz 5   101 notas, 11 compases             → la melodía
-```
+### Melodía de una voz, sin bajo
 
-La voz 4 es el bajo porque 59 de sus 114 notas son la misma letra: eso es un
-bordón, no una melodía. Y la melodía es la 5 porque tiene un compás más, y ese
-compás final es suyo solo — una nota sostenida, que es como termina una
-melodía.
-
-**El lenguaje tiene una sola voz**: `tracker.sintetizar()` recorre `notas`, una
-lista plana, secuencialmente. No hay forma de tocar melodía y bajo a la vez.
-Por eso el tema no suena igual por más fiel que sea la melodía: **le falta una
-parte entera**, y no es un detalle de afinación.
-
-Hacerlo bien exigiría polifonía: dos listas sumadas muestra a muestra.
-
-### La octava, que la partitura no trae
-
-La voz 5 mezcla `D` (29 veces) y `d` (9 veces), la misma letra en dos cajas.
-Tomarlas como dos octavas produce saltos de **quintadecimas** dentro de una
-frase, que no es música. La lectura que sí funciona es que **la caja no
-significa octava**: ignorada, la melodía queda en Do mayor pentatónico
-(`C D E F G`), que es exactamente lo que usa una melodita alegre de 8 bits.
-
-Y dentro de una sola octava. Un primer intento elegía para cada nota «la octava
-más cercana a la anterior», pero en música temperada los intervalos no son
-simétricos alrededor de una nota, así que metía una `F4` entre dos `C5`. Para
-una pentatónica, lo simple es lo correcto.
+El Plan A es melódico: `TEMA_NYAN` lleva solo la mano derecha, en una sola
+voz y sin bloques `VOICE`. El bajo publicado existe, pero sonaría a la vez
+que la melodía y eso exige polifonía, que es otro plan.
 
 ### Los dos botones que controlan todo
 
@@ -785,8 +765,8 @@ Una vez leída la rejilla, la melodía entera se controla con dos números:
 
 | Parámetro | Qué cambia |
 |---|---|
-| `SLOT_MS` | el tempo. 60 ms da un tema de 17.2 s |
-| la octava fija | dónde cae la línea melódica |
+| `SLOT_MS` | el tempo. 60 ms da un tema de 18.72 s |
+| la octava fija | dónde cae la línea melódica. La mano derecha va en octava 5 |
 
 Cambiar el tempo es cambiar un número, ni una nota.
 

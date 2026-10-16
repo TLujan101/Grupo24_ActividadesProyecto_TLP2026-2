@@ -308,9 +308,37 @@ class Parser:
                 raise Exception("Error de sintaxis: onda '" + str(onda) +
                                 "' no valida (use SINE o SQUARE)")
         self.consumir(':')
-        notas = self.leer_notas()
+        if self.ver() == 'VOICE':
+            # Varias voces: se mezclan muestra a muestra en el sintetizador.
+            voces = self.leer_voces()
+            self.ast['songs'][nombre] = {"voces": voces, "wave": onda}
+        else:
+            notas = self.leer_notas()
+            self.ast['songs'][nombre] = {"notas": notas, "wave": onda}
         self.consumir('END')
-        self.ast['songs'][nombre] = {"notas": notas, "wave": onda}
+
+    def leer_voces(self):
+        # VOICE <n>: <notas> END  (una o mas)
+        # El numero es informativo: las voces se mezclan entre si, asi que solo
+        # importa el orden de declaracion. Se valida para dar un error claro si
+        # alguien repite uno.
+        voces = []
+        vistos = []
+        while self.ver() == 'VOICE':
+            self.consumir('VOICE')
+            numero = self.consumir_numero()
+            self.consumir(':')
+            if numero in vistos:
+                raise Exception("Error de sintaxis: la voz " + str(numero) +
+                                " esta definida dos veces")
+            vistos.append(numero)
+            voces.append(self.leer_notas())
+            self.consumir('END')
+        if len(voces) < 2:
+            raise Exception("Error de sintaxis: una cancion con VOICE necesita al "
+                            "menos dos voces; con una sola, escribe las notas "
+                            "directas despues de los dos puntos")
+        return voces
 
     def parsear_efecto(self):
         self.consumir('DEFINE')

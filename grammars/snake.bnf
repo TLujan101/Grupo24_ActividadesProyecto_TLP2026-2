@@ -14,7 +14,10 @@
 <fila>             ::= "[" <valores_fila> "]"
 <valores_fila>     ::= <numero> | <numero> "," <valores_fila>
 
-<definicion_cancion> ::= "DEFINE" "SONG" <identificador> <extras_musica> ":" <notas> "END"
+<definicion_cancion> ::= "DEFINE" "SONG" <identificador> <extras_musica> ":" <cuerpo_cancion> "END"
+<cuerpo_cancion> ::= <notas> | <voces>
+<voces>       ::= <voz> <voz> | <voz> <voces>
+<voz>         ::= "VOICE" <numero> ":" <notas> "END"
 <definicion_efecto>  ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END"
 <extras_musica> ::= "" | "WAVE" <onda>
 <onda>        ::= "SINE" | "SQUARE"

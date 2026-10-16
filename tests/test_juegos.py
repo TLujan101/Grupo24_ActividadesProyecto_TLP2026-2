@@ -2,6 +2,7 @@
 # Tests de integracion: compilar los .brick reales, crear el juego correcto
 # y ejecutar el runtime.
 
+import array
 import glob
 import json
 import os
@@ -11,7 +12,7 @@ import sys
 import unittest
 
 import compiler
-from engine import crear_juego, JUEGOS, Game, Tetris, Snake
+from engine import crear_juego, JUEGOS, Game, Tetris, Snake, tracker
 from engine.utilidades import eleccion_ponderada
 
 CARPETA_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -122,6 +123,21 @@ class TestJuegosReales(unittest.TestCase):
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.audio.llamadas, [('efecto',)])
         self.assertEqual(juego.audio.musica_actual, esperado)
+
+    def test_tema_nyan_sintetiza_la_melodia_completa(self):
+        # 12 compases de 26 slots a 60 ms: 18.72 s de melodia de una sola voz.
+        # Empieza con 600 ms de entrada y cierra con 1500 ms de salida.
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
+        cancion = datos_juego['songs']['TEMA_NYAN']
+        self.assertNotIn('voces', cancion)
+        self.assertEqual(sum(ms for _, ms in cancion['notas']), 18720)
+        pcm = tracker.cancion_pcm('TEMA_NYAN', cancion['notas'], cancion['wave'])
+        muestras = array.array('h')
+        muestras.fromstring(pcm)
+        self.assertEqual(len(muestras), int(tracker.FPS * 18720 / 1000.0))
+        self.assertTrue(any(m != 0 for m in muestras))
+        self.assertTrue(all(m == 0 for m in muestras[:int(tracker.FPS * 0.6)]))
+        self.assertTrue(all(m == 0 for m in muestras[-int(tracker.FPS * 1.5):]))
 
     def test_snake_clasico_no_abre_menu(self):
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake.brick'))

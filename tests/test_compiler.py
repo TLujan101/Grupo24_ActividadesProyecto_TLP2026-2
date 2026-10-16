@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Tests del compilador: el lexer y el parser de BrickScript.
 
+import json
+import os
 import unittest
 
 import compiler
@@ -69,25 +71,54 @@ class TestLexer(unittest.TestCase):
         ast = compilar('DEFINE SONG X:\n  NOTE C4 200\n  NOTE REST 400\nEND\n')
         self.assertEqual(ast['songs']['X']['notas'], [[261.6, 200], [0.0, 400]])
 
-def test_onda_de_la_cancion(self):
-        ast = compilar('DEFINE SONG X WAVE SQUARE:\n  NOTE C4 200\nEND\n')
+    def test_onda_de_la_cancion(self):
+            ast = compilar('DEFINE SONG X WAVE SQUARE:\n  NOTE C4 200\nEND\n')
+            self.assertEqual(ast['songs']['X']['wave'], 'SQUARE')
+            # Sin WAVE, senoidal
+            ast = compilar('DEFINE SONG Y:\n  NOTE C4 200\nEND\n')
+            self.assertEqual(ast['songs']['Y']['wave'], 'SINE')
+            # Un efecto no lleva onda: suena una vez y no se elige timbre
+            ast = compilar('DEFINE EFFECT Z:\n  NOTE C4 200\nEND\n')
+            self.assertNotIn('wave', ast['effects']['Z'])
+
+    def test_onda_invalida_avisada(self):
+            with self.assertRaises(Exception) as contexto:
+                compilar('DEFINE SONG X WAVE TRIANGULO:\n  NOTE C4 200\nEND\n')
+            self.assertIn("onda 'TRIANGULO' no valida", str(contexto.exception))
+
+    def test_cancion_con_varias_voces(self):
+        ast = compilar('DEFINE SONG X WAVE SQUARE:\n'
+                       '  VOICE 1:\n    NOTE C5 60\n    NOTE REST 60\n  END\n'
+                       '  VOICE 2:\n    NOTE REST 60\n    NOTE G3 120\n  END\nEND\n')
         self.assertEqual(ast['songs']['X']['wave'], 'SQUARE')
-        # Sin WAVE, senoidal
-        ast = compilar('DEFINE SONG Y:\n  NOTE C4 200\nEND\n')
-        self.assertEqual(ast['songs']['Y']['wave'], 'SINE')
-        # Un efecto no lleva onda: suena una vez y no se elige timbre
-        ast = compilar('DEFINE EFFECT Z:\n  NOTE C4 200\nEND\n')
-        self.assertNotIn('wave', ast['effects']['Z'])
+        self.assertEqual(ast['songs']['X']['voces'],
+                         [[[523.3, 60], [0.0, 60]], [[0.0, 60], [196.0, 120]]])
+        # Con varias voces no se guarda 'notas': son dos listas, no una
+        self.assertNotIn('notas', ast['songs']['X'])
 
-def test_onda_invalida_avisada(self):
+    def test_una_cancion_de_una_sola_voce_no_lleva_voces(self):
+        ast = compilar('DEFINE SONG X:\n  NOTE C5 60\nEND\n')
+        self.assertNotIn('voces', ast['songs']['X'])
+        self.assertEqual(ast['songs']['X']['notas'], [[523.3, 60]])
+
+    def test_voce_repetida_avisada(self):
         with self.assertRaises(Exception) as contexto:
-            compilar('DEFINE SONG X WAVE TRIANGULO:\n  NOTE C4 200\nEND\n')
-        self.assertIn("onda 'TRIANGULO' no valida", str(contexto.exception))
+            compilar('DEFINE SONG X:\n'
+                     '  VOICE 1:\n    NOTE C5 60\n  END\n'
+                     '  VOICE 1:\n    NOTE G3 60\n  END\nEND\n')
+        self.assertIn("la voz 1 esta definida dos veces", str(contexto.exception))
 
-def test_cadena_con_comentarios_y_decimales(self):
-        fuente = '# velocidad\nLEVEL BABY:\n  TICK 0.15\nEND'
-        self.assertEqual(compiler.lexer(fuente),
-                         ['LEVEL', 'BABY', ':', 'TICK', '0.15', 'END'])
+    def test_una_sola_voce_avisada(self):
+        # Con una sola voz el bloque VOICE no tiene sentido: seria lo mismo que
+        # escribir las notas directas, y asi se evita la confucion.
+        with self.assertRaises(Exception) as contexto:
+            compilar('DEFINE SONG X:\n  VOICE 1:\n    NOTE C5 60\n  END\nEND\n')
+        self.assertIn("al menos dos voces", str(contexto.exception))
+
+    def test_cadena_con_comentarios_y_decimales(self):
+            fuente = '# velocidad\nLEVEL BABY:\n  TICK 0.15\nEND'
+            self.assertEqual(compiler.lexer(fuente),
+                             ['LEVEL', 'BABY', ':', 'TICK', '0.15', 'END'])
 
 
 BRICK_CON_NIVELES = """
@@ -113,6 +144,23 @@ END
 
 def compilar(fuente):
     return compiler.Parser(compiler.lexer(fuente)).parse()
+
+
+class TestTemaNyan(unittest.TestCase):
+
+    def test_tema_nyan_es_la_melodia_fiel_de_una_voz(self):
+        # La referencia es la mano derecha publicada: 12 compases de 26 slots.
+        # El Plan A es melodico: TEMA_NYAN no lleva bajo ni bloques VOICE.
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(raiz, 'tests', 'fixtures', 'nyan_melodia.json')) as f:
+            esperadas = json.load(f)['notas']
+        with open(os.path.join(raiz, 'games', 'snake_remake.brick')) as f:
+            ast = compilar(f.read())
+        cancion = ast['songs']['TEMA_NYAN']
+        self.assertEqual(cancion['wave'], 'SQUARE')
+        self.assertNotIn('voces', cancion)
+        self.assertEqual(cancion['notas'], esperadas)
+        self.assertEqual(sum(ms for _, ms in esperadas), 12 * 26 * 60)
 
 
 class TestParserNiveles(unittest.TestCase):

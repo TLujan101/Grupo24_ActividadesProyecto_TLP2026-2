@@ -240,14 +240,21 @@ class Game(object):
         if not nombre or nombre not in canciones:
             return
         notas = canciones[nombre].get('notas', [])
+        voces = canciones[nombre].get('voces')
         onda = canciones[nombre].get('wave', tracker.ONDA_SENOIDAL)
-        firma = tracker.firma_partitura(notas, onda)
+        if voces:
+            firma = tracker.firma_voces(voces, onda)
+        else:
+            firma = tracker.firma_partitura(notas, onda)
 
         # Idempotente: ON_START se re-dispara al fijar cada pieza.
         if firma == self.audio.musica_actual and self.audio.reproduciendo_musica:
             return
 
-        pcm = tracker.cancion_pcm(nombre, notas, onda)
+        if voces:
+            pcm = tracker.cancion_pcm_voces(nombre, voces, onda)
+        else:
+            pcm = tracker.cancion_pcm(nombre, notas, onda)
         if not pcm:
             return
         self.audio.reproducir_musica_fondo(pcm, firma)
