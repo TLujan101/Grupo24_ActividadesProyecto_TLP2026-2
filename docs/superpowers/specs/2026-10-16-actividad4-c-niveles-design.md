@@ -24,7 +24,7 @@ nivel Nyan no podría tener cabeza de gato mientras Baby conserva el rectángulo
 |----------|--------------------------|--------|
 | Orden: C → A → B → D | A primero | A se implementaría dos veces: primero estática y luego por nivel |
 | El `.brick` elige el nivel inicial + el jugador puede cambiarlo con teclas | progresión por puntuación; un archivo por nivel | "Multinivel" aquí significa *elegir*, no *subir solo*. La progresión metería reglas de balance en la gramática |
-| Menú dibujado en el canvas, **solo si hay 2+ niveles** | menú siempre; selector por consola | Sin menú, `snake.brick` recorre el flujo de hoy sin ramas especiales. El menú no bloquea los tests |
+| Menú de botones apilados en el panel lateral, **solo si hay 2+ niveles** | menú siempre; selector por consola | Sin menú, `snake.brick` recorre el flujo de hoy sin ramas especiales. Los botones reusan `marco_score`, así que no hay ventana nueva |
 | El `.brick` declara el comportamiento; el motor no conoce nombres de nivel | perfiles hardcodeados (`if nivel == 'NYAN_CAT'`) | El punto D se cumple por construcción: sin `LEVELS` la configuración queda vacía y cada modificador ausente toma su default |
 | `TICK` en segundos con decimales | `TICK_MS` en milisegundos | Una sola unidad en todo el lenguaje: `velocidad_gravedad` ya está en segundos |
 
@@ -265,22 +265,62 @@ Dos motivos concretos, no paranoia:
 
 ### 6.5 El menú
 
-Textos sobre el canvas existente, sin ventana nueva:
+Botones rectangulares apilados en el **panel lateral que ya existe**
+(`marco_score`), no sobre el canvas y sin ventana nueva. `pack()` los apila
+verticalmente sin trabajo extra, y `tk.Button` ya da el clic con `command` sin
+tener que hacer hit-testing de coordenadas.
 
 ```
-   ELIGE NIVEL
-   [1] BABY         TICK 0.15
-   [2] ENTUSIASTA   TICK 0.10
-   [3] NYAN_CAT     TICK 0.06   <- inicio
+┌────────────────┐    ┌──────────────────────────────┐
+│ PUNTUACION     │    │                              │
+│ 0              │    │                              │
+│                │    │        (canvas vacío)        │
+│ CONTROLES      │    │                              │
+│ Flechas: Mover │    │                              │
+│                │    │                              │
+│ ELIGE NIVEL    │    │                              │
+│ ┌────────────┐ │    │                              │
+│ │ 1. Baby    │ │    │                              │
+│ ├────────────┤ │    │                              │
+│ │2. Entusiasta│ │    │                              │
+│ ├────────────┤ │    │                              │
+│ │3. Nyan Cat│ │    │                              │
+│ └────────────┘ │    │                              │
+└────────────────┘    └──────────────────────────────┘
 ```
 
-Las teclas `1`..`N` eligen por posición en el orden de declaración, que es el
-orden de la lista del AST (5.3). Un `.brick` puede declarar más de nueve
-niveles sin cambiar el motor, pero solo los primeros nueve son alcanzables con
-una tecla.
+**Cada botón es clickeable y también hay tecla.** Las dos rutas llaman a la
+misma función, `elegir_nivel(indice)`: el `command` del botón y la tecla `1`..
+`N`. No hay dos caminos que puedan desincronizarse.
 
-Si un nivel no declara `TICK`, el menú **omite la línea del tick** en vez de
-inventar un valor: el default lo aporta el juego, no el menú.
+Al elegir se **destruyen** el título y los botones. Durante el menú no hay nada
+que elegir en el canvas, así que `run()` no dibuja nada: solo arma los widgets.
+
+**La etiqueta sale del identificador, no de una tabla.** El motor traduce el
+nombre del `.brick` a texto con `nombre.replace('_', ' ').title()`:
+
+| Identificador en el `.brick` | Texto del botón |
+|---|---|
+| `BABY` | `1. Baby` |
+| `ENTUSIASTA` | `2. Entusiasta` |
+| `NYAN_CAT` | `3. Nyan Cat` |
+
+Eso evita agregar un modificador `LABEL` a la gramática solo por estética, y
+evita una tabla de nombres en el motor — que es justo lo que la sección 2
+prohibió. El enunciado llama "Entusiasta" al segundo nivel y el nombre del
+identificador sigue esa palabra.
+
+El motor crea un botón por nivel declarado, así que un `.brick` puede declarar
+más de nueve niveles sin cambiar el motor; solo los primeros nueve tienen tecla
+directa, pero todos son clickeables.
+
+### 6.6 Doble de Tkinter
+
+`tests/tk_falso.py` **no necesita cambios**: `Button` y `Label` ya están
+registrados (`tk_falso.py:110`), `WidgetFalso` guarda `text` y `command` en
+`opciones`, `pack()` es no-op, `destroy()` marca `destruido` y `master.hijos`
+registra los hijos. Eso permite tanto afirmar el texto del botón como **invocar
+su `command()`** para simular el clic en los tests.
 
 ## 7. `games/snake_remake.brick`
 
@@ -302,13 +342,13 @@ y A, para que no parezca un bloque de adorno.
 | Archivo | Qué cubre |
 |---------|-----------|
 | `tests/test_compiler.py` *(nuevo)* | El lexer acepta `0.15` como un token y los enteros no cambian. `LEVELS` produce el AST esperado; `START` se lee primero. Sin `LEVELS` sale `[{'nombre': 'BABY'}]`. Las 5 validaciones con su mensaje. El bloque parsea en distintas posiciones del archivo |
-| `tests/test_game.py` | `nivel_actual` / `nivel_config` salen de los datos; un dict **sin** `levels` no revienta. `aplicar_nivel()` solo pisa si hay `tick`. Con 2+ niveles `run()` dibuja el menú y no programa el loop; con menos, sí (el test de `game.py:88` sigue pasando sin tocarse). La tecla `2` elige nivel, corre `ON_START` y arranca el loop; con el menú abierto las flechas y los dígitos fuera de rango se ignoran |
+| `tests/test_game.py` | `nivel_actual` / `nivel_config` salen de los datos; un dict **sin** `levels` no revienta. `aplicar_nivel()` solo pisa si hay `tick`. Con 2+ niveles `run()` crea un botón por nivel y no programa el loop; con menos, sí (el test de `game.py:88` sigue pasando sin tocarse). El texto de cada botón sale del identificador. La tecla `2` elige nivel, corre `ON_START` y arranca el loop; invocar el `command()` de un botón hace lo mismo. Con el menú abierto las flechas y los dígitos fuera de rango se ignoran. Al elegir, los botones quedan destruidos |
 | `tests/test_snake.py` | Snake con nivel `TICK 0.06` → `velocidad_gravedad == 0.06`; sin nivel → `0.15`. **`test_dibujar_comida_y_serpiente` no se toca**: es la prueba de que el camino por defecto quedó idéntico |
 | `tests/test_retrocompatibilidad.py` | `snake.brick` compila a `start_level == 'BABY'` y `levels == [{'nombre': 'BABY'}]`, y su partida sigue igual. Un JSON viejo sin `levels` todavía arranca |
 | `tests/test_juegos.py` | `snake_remake.brick`: sin elegir nivel la partida no arranca; al pulsar `2` aparecen la serpiente y la comida |
 
-`tests/tk_falso.py` necesita `create_text` en el canvas falso para poder
-afirmar el menú. La sección A necesitará además `create_oval` y
+`tests/tk_falso.py` **no se toca**: `Button` y `Label` ya sirven para afirmar el
+menú y para simular el clic (ver 6.6). La sección A necesitará `create_oval` y
 `create_polygon`, pero eso se agrega en A.
 
 ## 9. Fuera de alcance
@@ -326,7 +366,7 @@ Trabajo directo en `main`, un commit por paso:
 1. `compiler.py` (lexer con decimales) + `tests/test_compiler.py`
 2. `compiler.py` (`parsear_niveles` + validaciones) + tests
 3. `grammars/snake.bnf` + `grammars/tetris.bnf`
-4. `engine/game.py` (niveles + menú) + `tests/test_game.py` + `tests/tk_falso.py`
+4. `engine/game.py` (niveles + menú de botones) + `tests/test_game.py`
 5. `engine/snake.py` (aplicar el tick del nivel) + `tests/test_snake.py`
 6. `games/snake_remake.brick` + `tests/test_juegos.py` + `tests/test_retrocompatibilidad.py`
 7. `docs/Guia-BrickScript.txt`
