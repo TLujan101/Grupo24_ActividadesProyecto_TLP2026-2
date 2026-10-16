@@ -44,13 +44,18 @@
 * posicion y en Python 2.7 un dict no conserva el orden de declaracion.
 *
 * <real> es un token unico para el lexer: 0.15 llega como un solo token.
+*
+* Tetris no declara LEVELS hoy: usa PLAY_MUSIC desde ON START. El bloque existe
+* para los dos juegos porque el parser es compartido, y MUSIC funciona igual
+* (se pide al iniciar la partida, antes de ON START, asi que un PLAY_MUSIC del
+* evento la reemplaza).
 
 <niveles>          ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
 <elegir_nivel>     ::= "" | "START" ":" <identificador>
 <definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
 <definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
 <modificadores_nivel> ::= "" | <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
-<modificador_nivel> ::= "TICK" <real>
+<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador>
 
 <identificador> ::= <letra> | <letra> <identificador>
 <numero>        ::= <digito> | <digito> <numero>

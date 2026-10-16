@@ -446,4 +446,153 @@ se leería como `C4`. Es una limitación conocida, deliberada por ahora.
 
 ---
 
+## 11. Música por nivel (sección C de la Actividad 4)
+
+Hasta aquí una canción es una cosa del archivo, y el `.brick` decide cuándo
+suena con `PLAY_MUSIC`. Con el bloque `LEVELS` cada nivel puede además declarar
+**su propio tema**:
+
+```
+DEFINE SONG TEMA_CALMO:
+    NOTE C4 800
+    NOTE E4 800
+END
+
+LEVELS:
+  START: NYAN_CAT
+  LEVEL BABY:
+    TICK 0.15
+    MUSIC TEMA_CALMO
+  END
+  LEVEL NYAN_CAT:
+    TICK 0.06
+    MUSIC TEMA_NYAN
+  END
+END
+```
+
+### Tres decisiones que hubo que tomar
+
+**1. El modificador guarda el tipo de su valor.** `TICK` toma un real y `MUSIC`
+un identificador, así que la tabla del compilador no puede ser un diccionario
+de "nombre → clave": tiene que decir también qué clase de valor espera cada uno.
+
+```python
+MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre')}
+```
+
+Sin el segundo elemento, el parser haría `float('TEMA_CALMO')` y reventaría.
+
+**2. La música se pide al iniciar la partida, no al construir el juego.** Este
+detalle es el que más costó acertar. El motor tiene un método `aplicar_nivel()`
+que corre en `__init__`, y el lugar obvio para leer `music` era ahí. Pero
+`__init__` también arma el menú de selección: si la música se pidiera ahí, el
+tema del nivel inicial sonaría antes de que el jugador elija nada.
+
+La llamada quedó en `iniciar_partida()`, justo antes de `ON START`:
+
+```python
+def iniciar_partida(self):
+    self.aplicar_nivel()      # tick
+    self.musica_del_nivel()    # la del nivel
+    self.ejecutar_evento('ON_START')
+    self.iniciado = True
+```
+
+**3. `PLAY_MUSIC` del evento gana.** Por el orden de esas tres líneas, un
+`PLAY_MUSIC` en `ON START` llega después y pisa la del nivel. Es la precedencia
+sin necesidad de una regla nueva: el nivel pone la música base y el evento puede
+reemplazarla.
+
+```
+aplicar_nivel  →  musica_del_nivel  →  ON START (PLAY_MUSIC)
+```
+
+### El compilador avisa si la canción no existe
+
+El motor es tolerante a propósito: si le pides una canción que no está, suena
+mudo y el juego sigue. Pero para el `.brick` eso es una trampa — un typo en el
+nombre dejaría el nivel callado sin explicación. Así que el compilador lo
+valida, **al final** del parseo para que el orden de los bloques dé igual y una
+canción pueda declararse después del `LEVELS`:
+
+```python
+def validar_musicas_de_niveles(self):
+    for nivel in self.ast['levels']:
+        cancion = nivel.get('music')
+        if cancion and cancion not in self.ast['songs']:
+            raise Exception("... el nivel '%s' pide la cancion '%s' pero no esta definida")
+```
+
+### Y un detalle sobre `levels` que viene de más atrás
+
+`levels` es una **lista**, no un diccionario, y por una razón que solo aparece
+en Python 2.7: el menú se numera por posición, y un `dict` en esa versión no
+conserva el orden de declaración al pasar por `json.dump` / `json.load`.
+
+```
+Declarado en el .brick:  NYAN_CAT, BABY, ENTUSIASTA
+json.load en py2.7   ->  [BABY, NYAN_CAT, ENTUSIASTA]   <- desordenado
+json.load en py3.14  ->  [NYAN_CAT, BABY, ENTUSIASTA]   <- correcto
+```
+
+---
+
+## 12. Efectos de sonido en Snake
+
+No hizo falta ninguna regla nueva: `PLAY_EFFECT` ya era una orden del lenguaje
+desde antes de que existieran los niveles. Lo único que faltaba era declararlos
+en el archivo y en la gramática.
+
+```
+DEFINE EFFECT COMER:
+    NOTE C6 60
+    NOTE E6 60
+    NOTE G6 120
+END
+
+ON EAT_FOOD:
+  INCREASE_SCORE 10
+  GROW PLAYER 1
+  PLAY_EFFECT COMER
+  SPAWN FOOD AT RANDOM
+END
+```
+
+El efecto de muerte va en `ON GAME_OVER` y no en los eventos de colisión:
+
+```
+ON GAME_OVER:
+  PLAY_EFFECT MORIR
+END
+```
+
+Porque el motor emite `ON GAME_OVER` **una sola vez**, tanto si la serpiente
+choca con la pared como si se come a sí misma (`game.py` lo emite desde el loop
+con la guarda `_game_over_emitido`). Si el efecto fuera a `ON COLLISION_WALL`,
+habría que duplicarlo en `ON COLLISION_SELF` para que suene igual en los dos
+casos.
+
+### Sobre el doble de audio de los tests
+
+Un detalle que salió en el camino y que explica un ruido bastante raro que
+aparecía al final de cada corrida de los tests: los
+tests **usaban el gestor de audio real**. `tests/tk_falso.py` sustituía el audio
+registrando `sys.modules['audio']`, pero `engine/game.py` hace un import
+**relativo** (`from .audio import ...`), que resuelve a `engine.audio` y nunca
+consulta ese diccionario. La sustitución correcta es sobre el símbolo que el
+motor ya importó:
+
+```python
+import engine.game
+engine.game.GestorAudioNativo = AudioFalso
+```
+
+La consecuencia no era solo teórica: como `Game.__init__` crea el gestor de
+audio siempre, cada juego creado en los tests abría una carpeta temporal que
+solo se borra al cerrar la ventana — y los tests nunca cierran la ventana. Eran
+**85 carpetas por corrida** de la suite.
+
+---
+
 *Documento del grupo 24 – Proyecto TLP 2026-2*

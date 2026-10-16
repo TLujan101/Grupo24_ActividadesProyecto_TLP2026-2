@@ -2,7 +2,7 @@
 
 <tipo_juego> ::= "GAME_TYPE" "SNAKE"
 <grid>       ::= "GAME_GRID" "(" <numero> "," <numero> ")"
-<definiciones> ::= <definicion_shape> | <definicion_shape> <definiciones>
+<definiciones> ::= <definicion_shape> | <definicion_song> | <definicion_efecto> | <definicion_shape> <definiciones> | <definicion_song> <definiciones> | <definicion_efecto> <definiciones>
 <opcional_niveles> ::= "" | <niveles>
 <eventos>    ::= <evento> | <evento> <eventos>
 
@@ -14,11 +14,18 @@
 <fila>             ::= "[" <valores_fila> "]"
 <valores_fila>     ::= <numero> | <numero> "," <valores_fila>
 
+<definicion_cancion> ::= "DEFINE" "SONG" <identificador> ":" <notas> "END"
+<definicion_efecto>  ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END"
+<notas>       ::= <nota> | <nota> <notas>
+<nota>        ::= "NOTE" <nota_musical> <numero>
+<nota_musical> ::= <letra_a_g> <digito>
+<letra_a_g>   ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
+
 <evento>         ::= "ON" <nombre_evento_snake> ":" <acciones_snake> "END"
-<nombre_evento_snake> ::= "START" | "TICK" | "EAT_FOOD" | "COLLISION_WALL" | "COLLISION_SELF" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
+<nombre_evento_snake> ::= "START" | "TICK" | "EAT_FOOD" | "GAME_OVER" | "COLLISION_WALL" | "COLLISION_SELF" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
 <acciones_snake>     ::= <accion_snake> | <accion_snake> <acciones_snake>
 
-<accion_snake> ::= <accion_spawn_jugador> | <accion_spawn_comida> | <accion_mover> | <accion_direccion> | <accion_puntos> | <accion_crecer> | <accion_gameover>
+<accion_snake> ::= <accion_spawn_jugador> | <accion_spawn_comida> | <accion_mover> | <accion_direccion> | <accion_puntos> | <accion_crecer> | <accion_gameover> | <accion_musica> | <accion_efecto> | <accion_parar_musica>
 <accion_spawn_jugador> ::= "SPAWN" "PLAYER" "AT" <coordenadas>
 <accion_spawn_comida>  ::= "SPAWN" "FOOD" "AT" "RANDOM"
 <accion_mover>         ::= "MOVE" "PLAYER" "FORWARD"
@@ -26,6 +33,9 @@
 <accion_puntos>        ::= "INCREASE_SCORE" <numero>
 <accion_crecer>        ::= "GROW" "PLAYER" <numero>
 <accion_gameover>      ::= "GAME_OVER"
+<accion_musica>        ::= "PLAY_MUSIC" <identificador>
+<accion_efecto>        ::= "PLAY_EFFECT" <identificador>
+<accion_parar_musica>  ::= "STOP_MUSIC"
 
 <coordenadas>   ::= "(" <numero> "," <numero> ")"
 <direccion>     ::= "UP" | "DOWN" | "LEFT" | "RIGHT"
@@ -37,13 +47,18 @@
 *
 * <real> es un token unico para el lexer: 0.15 llega como un solo token, no
 * como un entero seguido de un punto.
+*
+* MUSIC es opcional y, si aparece, debe nombrar una cancion declarada en el
+* mismo archivo; el compilador lo comprueba al final. La cancion se pide al
+* INICIAR LA PARTIDA, antes de ON START, asi que un PLAY_MUSIC del evento
+* llega despues y la reemplaza.
 
 <niveles>          ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
 <elegir_nivel>     ::= "" | "START" ":" <identificador>
 <definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
 <definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
 <modificadores_nivel> ::= "" | <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
-<modificador_nivel> ::= "TICK" <real>
+<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador>
 
 <identificador> ::= <letra> | <letra> <identificador>
 <numero>        ::= <digito> | <digito> <numero>

@@ -90,6 +90,39 @@ class TestJuegosReales(unittest.TestCase):
             juego.manejar_tecla(random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT']))
             juego.game_loop()
 
+    def test_snake_remake_tiene_musica_por_nivel_y_efectos(self):
+        from engine import tracker
+        random.seed(1234)
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
+
+        # Cada nivel declara su tema, y el compilador ya habria fallado si
+        # alguno nombrara una cancion que no existe.
+        musicas = [n.get('music') for n in datos_juego['levels']]
+        self.assertEqual(sorted(musicas), ['TEMA_CALMO', 'TEMA_ENTUSIASTA', 'TEMA_NYAN'])
+        for nombre in musicas:
+            self.assertIn(nombre, datos_juego['songs'])
+            self.assertTrue(datos_juego['songs'][nombre]['notas'])
+
+        # Efectos de comer y de morir.
+        self.assertIn('COMER', datos_juego['effects'])
+        self.assertIn('MORIR', datos_juego['effects'])
+
+        # Al elegir un nivel suena SU tema, y el menu calla antes.
+        juego = crear_juego(datos_juego)
+        juego.run()
+        self.assertEqual(juego.audio.llamadas, [])
+        juego.botones_nivel[0].opciones['command']()          # '1. Baby'
+        esperado = tracker.firma_partitura(datos_juego['songs']['TEMA_CALMO']['notas'])
+        self.assertEqual(juego.audio.musica_actual, esperado)
+
+        # Comer suena el efecto, sin cortar la musica.
+        juego.audio.llamadas = []
+        juego.posicion_comida = (juego.serpiente_cuerpo[0][0] + 1,
+                                juego.serpiente_cuerpo[0][1])
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.audio.llamadas, [('efecto',)])
+        self.assertEqual(juego.audio.musica_actual, esperado)
+
     def test_snake_clasico_no_abre_menu(self):
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake.brick'))
         self.assertEqual(datos_juego['config']['start_level'], 'BABY')

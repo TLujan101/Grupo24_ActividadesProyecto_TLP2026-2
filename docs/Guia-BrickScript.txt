@@ -72,6 +72,10 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
 
     - TICK <real>: segundos entre cada tick del juego. Si un nivel no lo declara,
       el juego conserva su velocidad por defecto (Snake 0.15, Tetris 0.4).
+    - MUSIC <cancion>: tema que arranca con ese nivel. Debe ser una cancion
+      declarada con DEFINE SONG en el mismo archivo; si no existe, el compilador
+      avisa al compilar. Si el nivel no lo declara, manda el PLAY_MUSIC que pone
+      el propio archivo (o el silencio).
     - START: <nombre>: nivel con el que arranca la partida. Sin START se usa el
       primer nivel declarado.
     - Los nombres de nivel se escriben en MAYUSCULAS porque el lexer solo
@@ -84,6 +88,26 @@ El lenguaje se basa en bloques de comandos simples y faciles de entender.
     botones antes de empezar. Cada boton se puede hacer clic o elegir con su
     numero (1, 2, 3...) segun el orden en que estan declarados los niveles. El
     texto del boton sale del nombre: NYAN_CAT se muestra como 'Nyan Cat'.
+
+* ACCIONES DE SONIDO (en cualquier evento)
+    PLAY_MUSIC <cancion>   arranca la cancion en bucle
+    PLAY_EFFECT <efecto>   suena una vez y NO corta la musica
+    STOP_MUSIC             corta la musica
+
+    Ej:
+        ON EAT_FOOD:
+          INCREASE_SCORE 10
+          PLAY_EFFECT COMER
+        END
+
+        ON GAME_OVER:
+          PLAY_EFFECT MORIR
+        END
+
+    Un efecto nunca interrumpe la musica de fondo: van por canales separados.
+    Si el nombre no existe, el juego no se rompe, suena mudo. El motor emite
+    ON GAME_OVER una sola vez, tanto si choca con la pared como si se come a si
+    misma, asi que ahi va el efecto de morir.
 
 --- SINTAXIS PARA TETRIS ---
 
