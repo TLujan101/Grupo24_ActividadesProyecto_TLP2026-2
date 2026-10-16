@@ -20,8 +20,16 @@ from .audio import GestorAudioNativo
 
 COLOR_GRID_FIJA = '#343434' # Gris oscuro para las celdas fijadas
 
+# Etiqueta del nivel cuando el JSON no trae start_level. Es la gemela de
+# compiler.NIVEL_POR_DEFECTO; no comparten modulo porque el compilador no debe
+# importar de engine/ (arrastraria Tkinter al proceso de compilacion). Ni esta
+# ni la del compilador llevan comportamiento asociado: son solo nombres.
+NIVEL_POR_DEFECTO = 'BABY'
+
 
 class Game(object):
+
+    NIVEL_POR_DEFECTO = NIVEL_POR_DEFECTO
 
     def __init__(self, datos_juego):
         self.frame = 0
@@ -30,6 +38,13 @@ class Game(object):
         config = self.datos_juego.get('config', {})
         self.ancho = config.get('grid_size', [10, 20])[0]
         self.alto = config.get('grid_size', [10, 20])[1]
+        # Nivel activo. Todo con .get(): un .json compilado por la version
+        # anterior del compilador no trae 'levels' ni 'start_level', y hay
+        # JSON viejos en disco (games/tetris.json, games/tetris_reborn.json).
+        self.niveles = self.datos_juego.get('levels') or []
+        self.nivel_actual = config.get('start_level') or NIVEL_POR_DEFECTO
+        self.nivel_config = self.config_de_nivel(self.nivel_actual)
+        self.iniciado = False
         self.grid = [[0 for _ in range(self.ancho)] for _ in range(self.alto)]
         self.puntuacion = 0
         self.juego_terminado = False
@@ -70,10 +85,19 @@ class Game(object):
         self.root.bind('<Key>', self.manejar_input_gui)
 
         self.inicializar_estado()
+        # El nivel inicial pisa los defaults antes de cualquier otra cosa.
+        # iniciar_partida() lo vuelve a aplicar cuando el jugador elige otro
+        # nivel en el menu; aplicar dos veces es inofensivo porque lee la misma
+        # configuracion.
+        self.aplicar_nivel()
 
         self._game_over_emitido = False
         self.timer_gravedad = 0
-        self.ejecutar_evento('ON_START')
+        # Con 2+ niveles hay algo que preguntarle al jugador, asi que la
+        # partida no arranca sola: run() abrira el menu. Un .brick clasico
+        # declara un solo nivel y recorre el camino de siempre.
+        if not self.hay_selector_nivel():
+            self.iniciar_partida()
         self.timer_id = None
 
 
@@ -103,6 +127,37 @@ class Game(object):
     def avanzar_animacion_borrado(self):
         # Un frame de la animacion de borrado. Tetris lo sobreescribe.
         pass
+
+    # NIVELES
+    # -------
+    #
+    # El .brick declara los niveles y el motor obedece lo que encuentra. El
+    # motor nunca compara contra un nombre de nivel: si el .brick no declara
+    # nada, nivel_config sale vacio y cada juego conserva su default.
+
+    def config_de_nivel(self, nombre):
+        # levels es una lista (no un dict) para conservar el orden de
+        # declaracion en Python 2.7, de ahi que se busque por nombre.
+        for nivel in self.niveles:
+            if nivel.get('nombre') == nombre:
+                return nivel
+        return {}
+
+    def hay_selector_nivel(self):
+        # Con un solo nivel no hay nada que elegir: el .brick no declaro
+        # LEVELS y el juego arranca directo, como antes.
+        return len(self.niveles) > 1
+
+    def aplicar_nivel(self):
+        # Cada juego dejo su default en inicializar_estado(); el nivel lo pisa
+        # solo si lo declara. Tetris conserva 0.4 y Snake 0.15.
+        if 'tick' in self.nivel_config:
+            self.velocidad_gravedad = self.nivel_config['tick']
+
+    def iniciar_partida(self):
+        self.aplicar_nivel()
+        self.ejecutar_evento('ON_START')
+        self.iniciado = True
 
 
     # AUDIO (opcional: sin SONG ni EFFECT el juego arranca en silencio)

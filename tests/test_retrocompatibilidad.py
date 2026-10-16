@@ -9,7 +9,7 @@ import random
 import unittest
 
 import compiler
-from engine import crear_juego
+from engine import crear_juego, Game
 
 # Las variantes nuevas llevan una de estas palabras en el nombre del .brick
 VARIANTES_NUEVAS = ('reborn', 'remake')
@@ -130,6 +130,26 @@ class TestSnakeClasico(unittest.TestCase):
                 juego.manejar_tecla(random.choice(teclas))
                 juego.game_loop()
             self.assertTrue(juego.juego_terminado, nombre + ': teclas al azar')
+
+    def test_nivel_por_defecto_en_los_clasicos(self):
+        # Punto D: snake.brick no declara LEVELS, asi que debe compilar al
+        # nivel Baby. El nombre se materializa; los valores no, porque cada
+        # juego tiene su tick por defecto (Snake 0.15, Tetris 0.4).
+        for nombre, datos_juego in self.clasicos:
+            self.assertEqual(datos_juego['config']['start_level'], 'BABY', nombre)
+            self.assertEqual(datos_juego['levels'], [{'nombre': 'BABY'}], nombre)
+            self.assertNotIn('tick', datos_juego['levels'][0], nombre)
+
+    def test_json_viejo_sin_levels_arranca(self):
+        # Un .json compilado por la version anterior del compilador (no tiene
+        # 'levels') tiene que seguir arrancando
+        for nombre, datos_juego in self.clasicos:
+            viejo = {'tipo_juego': 'SNAKE', 'config': {'grid_size': [5, 5]},
+                     'shapes': {}, 'events': datos_juego['events']}
+            juego = crear_juego(viejo)
+            self.assertEqual(juego.nivel_actual, Game.NIVEL_POR_DEFECTO, nombre)
+            self.assertEqual(juego.nivel_config, {}, nombre)
+            self.assertEqual(juego.velocidad_gravedad, 0.15, nombre)
 
 
 if __name__ == '__main__':

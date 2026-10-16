@@ -28,6 +28,18 @@ def datos(eventos=None, grid=None):
     return datos_juego
 
 
+def datos_niveles(niveles, inicio='BABY', eventos=None):
+    datos_juego = datos(eventos)
+    datos_juego['config']['start_level'] = inicio
+    datos_juego['levels'] = niveles
+    return datos_juego
+
+
+NIVELES_TRES = [{'nombre': 'BABY', 'tick': 0.15},
+                {'nombre': 'ENTUSIASTA', 'tick': 0.1},
+                {'nombre': 'NYAN_CAT', 'tick': 0.06}]
+
+
 class TestGame(unittest.TestCase):
 
     def test_clase_abstracta(self):
@@ -123,6 +135,56 @@ class TestGame(unittest.TestCase):
         self.assertEqual(juego.canvas.rectangulos, [((25, 50, 50, 75), COLOR_GRID_FIJA)])
         juego.dibujar_celda(2, 3, '#123456')
         self.assertEqual(juego.canvas.rectangulos[-1], ((50, 75, 75, 100), '#123456'))
+
+
+class TestNiveles(unittest.TestCase):
+
+    def test_estado_del_nivel_activo(self):
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'NYAN_CAT'))
+        self.assertEqual(juego.nivel_actual, 'NYAN_CAT')
+        self.assertEqual(juego.nivel_config['tick'], 0.06)
+        # Con 3 niveles hay algo que preguntar: la partida NO arranca sola.
+        # El tick si se aplico ya (ver test_ticket_del_nivel...).
+        self.assertFalse(juego.iniciado)
+
+    def test_un_solo_nivel_arranca_solo(self):
+        # El .brick clasico declara un solo nivel: nada que preguntar, asi que
+        # la partida arranca en __init__ como siempre.
+        juego = JuegoPrueba(datos_niveles([{'nombre': 'BABY', 'tick': 0.15}], 'BABY'))
+        self.assertTrue(juego.iniciado)
+        self.assertEqual(juego.velocidad_gravedad, 0.15)
+
+    def test_ticket_del_nivel_pisa_el_default_del_juego(self):
+        # JuegoPrueba deja velocidad_gravedad = 0.1 (test_game.py:26)
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'NYAN_CAT'))
+        self.assertEqual(juego.velocidad_gravedad, 0.06)
+
+    def test_nivel_sin_tick_no_toca_el_default(self):
+        # El default lo aporta el juego (Tetris 0.4, Snake 0.15), no el nivel
+        juego = JuegoPrueba(datos_niveles([{'nombre': 'BABY'}], 'BABY'))
+        self.assertEqual(juego.velocidad_gravedad, 0.1)
+
+    def test_config_de_nivel(self):
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'ENTUSIASTA'))
+        self.assertEqual(juego.config_de_nivel('BABY')['tick'], 0.15)
+        self.assertEqual(juego.config_de_nivel('NO_EXISTE'), {})
+
+    def test_json_sin_levels_no_revienta(self):
+        # games/tetris.json y games/tetris_reborn.json fueron compilados por la
+        # version anterior del compilador y no tienen la clave. Tambien
+        # tests/test_juegos.py:31 fabrica juegos a mano.
+        juego = JuegoPrueba(datos())            # sin 'levels' ni 'start_level'
+        self.assertEqual(juego.niveles, [])
+        self.assertEqual(juego.nivel_actual, Game.NIVEL_POR_DEFECTO)
+        self.assertEqual(juego.nivel_config, {})
+        self.assertEqual(juego.velocidad_gravedad, 0.1)
+        self.assertTrue(juego.iniciado)
+
+    def test_nivel_inicial_inexistente_cae_a_vacio(self):
+        # Un start_level que no esta en la lista no debe romper el arranque
+        juego = JuegoPrueba(datos_niveles([{'nombre': 'BABY'}], 'FANTASMA'))
+        self.assertEqual(juego.nivel_config, {})
+        self.assertEqual(juego.velocidad_gravedad, 0.1)
 
 
 if __name__ == '__main__':

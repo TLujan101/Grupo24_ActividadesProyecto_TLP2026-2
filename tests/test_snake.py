@@ -175,6 +175,17 @@ class TestSnake(TestSnakeBase):
             ((25, 50, 50, 75), COLOR_SNAKE_CUERPO),
         ])
 
+    def test_tick_del_nivel(self):
+        # snake.py no cambia: el nivel pisa el 0.15 que Snake deja en
+        # inicializar_estado()
+        datos = datos_snake()
+        datos['config']['start_level'] = 'NYAN_CAT'
+        datos['levels'] = [{'nombre': 'BABY'}, {'nombre': 'NYAN_CAT', 'tick': 0.06}]
+        self.assertEqual(Snake(datos).velocidad_gravedad, 0.06)
+
+        # Sin declararlo, Snake conserva su 0.15
+        self.assertEqual(Snake(datos_snake()).velocidad_gravedad, 0.15)
+
 
 if __name__ == '__main__':
     unittest.main()
