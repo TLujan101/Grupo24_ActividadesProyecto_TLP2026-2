@@ -127,13 +127,33 @@ igual que ya lo hace la gramática existente para `GAME_GRID` y `DEFINE`.
 
 ### 5.3 AST producido
 
+`levels` es una **lista**, no un diccionario. La razón es el orden: el menú
+numerado depende del orden de declaración, y en **Python 2.7 —el intérprete
+que declara el proyecto— un diccionario no lo conserva**.
+
+```
+Declarado en el .brick:  NYAN_CAT, BABY, ENTUSIASTA
+json.load en py2.7   ->  [BABY, NYAN_CAT, ENTUSIASTA]   <- desordenado
+json.load en py3.14  ->  [NYAN_CAT, BABY, ENTUSIASTA]   <- correcto
+```
+
+Con un diccionario, el menú mostraría los niveles en un orden que el autor del
+`.brick` no puede predecir y la tecla `2` elegiría un nivel arbitrario. Como
+array JSON, el orden sobrevive en las dos versiones de Python.
+
 ```json
 "config": { "grid_size": [18, 18], "start_level": "NYAN_CAT" },
-"levels": { "BABY": {}, "ENTUSIASTA": {"tick": 0.1}, "NYAN_CAT": {"tick": 0.06} }
+"levels": [
+  {"nombre": "BABY", "tick": 0.15},
+  {"nombre": "ENTUSIASTA", "tick": 0.10},
+  {"nombre": "NYAN_CAT", "tick": 0.06}
+]
 ```
 
 `start_level` va en `config` porque es configuración de la partida, igual que
 `grid_size`. `levels` es una clave nueva al nivel del AST, **siempre presente**.
+El precio de usar lista es que el motor tiene que buscar por nombre en vez de
+indexar; son tres o cuatro niveles, un recorrido lineal no tiene costo.
 
 ### 5.4 Nivel por defecto (punto D)
 
@@ -141,7 +161,7 @@ Cuando el `.brick` no declara `LEVELS`, el compilador emite igualmente:
 
 ```json
 "config": { "grid_size": [18, 18], "start_level": "BABY" },
-"levels": { "BABY": {} }
+"levels": [ {"nombre": "BABY"} ]
 ```
 
 El nivel existe y es el inicial. Esto **materializa el nombre, no los valores**:
@@ -188,13 +208,25 @@ default natural en el juego (la geometría de la sección A) se leerán con
 
 | Atributo | Valor |
 |----------|-------|
-| `self.niveles` | `datos_juego.get('levels') or {}` |
-| `self.nivel_actual` | nombre del nivel inicial, `NIVEL_POR_DEFECTO = 'BABY'` como etiqueta |
-| `self.nivel_config` | `self.niveles.get(self.nivel_actual) or {}` |
+| `self.niveles` | `datos_juego.get('levels') or []` — **lista** de dicts con `nombre` (ver 5.3) |
+| `self.nivel_actual` | `config.get('start_level') or NIVEL_POR_DEFECTO`, un nombre |
+| `self.nivel_config` | el dict del nivel activo, `{}` si no está |
 | `self.iniciado` | `True` cuando `ON_START` ya corrió |
 
-`NIVEL_POR_DEFECTO` es **solo una etiqueta** para la interfaz: no lleva
+`NIVEL_POR_DEFECTO = 'BABY'` es **solo una etiqueta** para la interfaz: no lleva
 comportamiento asociado.
+
+Como `levels` es una lista, el motor no indexa por nombre: `Game` expone
+`config_de_nivel(nombre) -> dict`, que recorre la lista y devuelve `{}` si no
+encuentra el nombre. El menú, en cambio, la recorre en orden, que es justo lo
+que se necesita para numerar `1..N`.
+
+**Duplicación conocida:** la cadena `'BABY'` aparece en `compiler.py` (el
+nombre que el compilador inventa cuando el `.brick` no dice nada) y en
+`engine/game.py` (el nombre que el motor asume cuando el JSON no lo dice). Son
+dos capas con dos preguntas distintas, y no hay un módulo compartido razonable:
+el compilador no debe importar de `engine/` (arrastraría Tkinter al proceso de
+compilación). Ambas constantes van comentadas como etiqueta, sin comportamiento.
 
 ### 6.3 Flujo de arranque
 
@@ -242,8 +274,10 @@ Textos sobre el canvas existente, sin ventana nueva:
    [3] NYAN_CAT     TICK 0.06   <- inicio
 ```
 
-Las teclas `1`..`N` eligen por posición en el orden de declaración. Un `.brick`
-puede declarar más de tres niveles sin cambiar el motor.
+Las teclas `1`..`N` eligen por posición en el orden de declaración, que es el
+orden de la lista del AST (5.3). Un `.brick` puede declarar más de nueve
+niveles sin cambiar el motor, pero solo los primeros nueve son alcanzables con
+una tecla.
 
 Si un nivel no declara `TICK`, el menú **omite la línea del tick** en vez de
 inventar un valor: el default lo aporta el juego, no el menú.
@@ -267,10 +301,10 @@ y A, para que no parezca un bloque de adorno.
 
 | Archivo | Qué cubre |
 |---------|-----------|
-| `tests/test_compiler.py` *(nuevo)* | El lexer acepta `0.15` como un token y los enteros no cambian. `LEVELS` produce el AST esperado; `START` se lee primero. Sin `LEVELS` sale `{"BABY": {}}`. Las 5 validaciones con su mensaje. El bloque parsea en distintas posiciones del archivo |
+| `tests/test_compiler.py` *(nuevo)* | El lexer acepta `0.15` como un token y los enteros no cambian. `LEVELS` produce el AST esperado; `START` se lee primero. Sin `LEVELS` sale `[{'nombre': 'BABY'}]`. Las 5 validaciones con su mensaje. El bloque parsea en distintas posiciones del archivo |
 | `tests/test_game.py` | `nivel_actual` / `nivel_config` salen de los datos; un dict **sin** `levels` no revienta. `aplicar_nivel()` solo pisa si hay `tick`. Con 2+ niveles `run()` dibuja el menú y no programa el loop; con menos, sí (el test de `game.py:88` sigue pasando sin tocarse). La tecla `2` elige nivel, corre `ON_START` y arranca el loop; con el menú abierto las flechas y los dígitos fuera de rango se ignoran |
 | `tests/test_snake.py` | Snake con nivel `TICK 0.06` → `velocidad_gravedad == 0.06`; sin nivel → `0.15`. **`test_dibujar_comida_y_serpiente` no se toca**: es la prueba de que el camino por defecto quedó idéntico |
-| `tests/test_retrocompatibilidad.py` | `snake.brick` compila a `start_level == 'BABY'` y `levels == {'BABY': {}}`, y su partida sigue igual. Un JSON viejo sin `levels` todavía arranca |
+| `tests/test_retrocompatibilidad.py` | `snake.brick` compila a `start_level == 'BABY'` y `levels == [{'nombre': 'BABY'}]`, y su partida sigue igual. Un JSON viejo sin `levels` todavía arranca |
 | `tests/test_juegos.py` | `snake_remake.brick`: sin elegir nivel la partida no arranca; al pulsar `2` aparecen la serpiente y la comida |
 
 `tests/tk_falso.py` necesita `create_text` en el canvas falso para poder
