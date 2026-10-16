@@ -19,7 +19,7 @@
 - **Comentarios y mensajes en ASCII sin tildes** (`#` abre comentario en el `.brick` y el código existente es ASCII: `configuracion`, `sobreescribe`, `Se esperaba`).
 - **NO tocar `games/snake.brick`** (byte a byte idéntico a su estado actual). Es la prueba viviente de retrocompatibilidad.
 - **NO tocar ni commitear `games/tetris_reborn.brick`**: tiene un cambio sin commitear (estados 3 y 4 de la pieza I) que pertenece a otro trabajo. Verificar con `git status` antes de cada commit.
-- **No agregar primitivas de dibujo nuevas a `tests/tk_falso.py`** salvo `create_text` (Task 4). `create_oval` y `create_polygon` son de la sección A.
+- **`tests/tk_falso.py` no se toca en esta sección.** `Button` y `Label` ya alcanzan para el menú (spec 6.6). No agregar primitivas de dibujo nuevas: `create_oval` y `create_polygon` son de la sección A.
 - Orden de commits fijo, uno por tarea.
 
 ## Review Focus
@@ -44,7 +44,7 @@ Cinco modos de falla que el spec implica y que son los que más muerden:
 | `grammars/tetris.bnf` | Gramática de Tetris. Se le agrega el mismo bloque `LEVELS` y `<real>`: el parser es compartido, la regla sirve para los dos juegos | Modificar |
 | `engine/game.py` | Clase base. Ganancia: estado del nivel activo, `aplicar_nivel()`, `iniciar_partida()` y el menú de selección | Modificar |
 | `engine/snake.py` | Lógica de Snake. **No cambia**: `aplicar_nivel()` vive en `Game` y pisa el `velocidad_gravedad = 0.15` que Snake deja en `inicializar_estado()` | Sin cambios |
-| `tests/tk_falso.py` | Doble de Tkinter. Ganancia: `Canvas.create_text` para poder afirmar el menú | Modificar |
+| `tests/tk_falso.py` | Doble de Tkinter. **Sin cambios**: `Button` y `Label` ya permiten afirmar el menú e invocar el `command()` | Sin cambios |
 | `tests/test_game.py` | Tests de la clase base. Se le agregan los del nivel y el menú | Modificar |
 | `tests/test_snake.py` | Tests de Snake. Se le agregan los del tick por nivel | Modificar |
 | `tests/test_retrocompatibilidad.py` | Prueba de que los `.brick` clásicos siguen funcionando. Se le agregan las aserciones del nivel por defecto | Modificar |
@@ -700,49 +700,55 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Task 4: Menú de selección de nivel
+## Task 4: Menú de selección de nivel con botones
 
-Con 2+ niveles declarados, el juego pregunta antes de arrancar. El menú se dibuja en el canvas existente, sin ventana nueva, y las teclas `1..N` eligen por posición en el orden de declaración.
+Con 2+ niveles declarados, el juego pregunta antes de arrancar. El menú son botones rectangulares apilados en el panel lateral que ya existe (`marco_score`): clickeables **y** accesibles por tecla. No hay ventana nueva, no hay overlay sobre el canvas, y **no hay que tocar `tests/tk_falso.py`**: `Button` y `Label` ya guardan `text` y `command` en `opciones`, `pack()` es no-op, `destroy()` marca `destruido`.
 
 **Files:**
-- Modify: `tests/tk_falso.py` (`Canvas`, línea 53-63)
-- Modify: `engine/game.py` (`run` línea 158, `manejar_tecla` línea 206, nuevos `dibujar_menu_nivel` y `elegir_nivel`)
+- Modify: `engine/game.py` (`run` línea 158, `manejar_tecla` línea 206, nuevos `mostrar_selector_nivel`, `elegir_nivel`, `etiqueta_nivel`)
 - Modify: `tests/test_game.py`
 
 **Interfaces:**
-- Consumes: `hay_selector_nivel()`, `self.niveles`, `self.nivel_config`, `iniciar_partida()` de la Task 3.
+- Consumes: `hay_selector_nivel()`, `self.niveles`, `iniciar_partida()` de la Task 3; `self.marco_score` que ya existe desde `__init__`.
 - Produces, en `Game`:
-  - `dibujar_menu_nivel() -> None` — texto sobre el canvas, con `create_text`
-  - `elegir_nivel(indice) -> None` — `indice` es 0-based; fija `nivel_actual`/`nivel_config`, llama `iniciar_partida()` y programa el loop
-  - `run()` — con menú abierto dibuja el menú y **no** programa el loop
+  - `self.botones_nivel` → `list` de widgets, vacía si el menú no está abierto. Se inicializa en `__init__`.
+  - `etiqueta_nivel(nombre) -> str` — `nombre.replace('_', ' ').title()`
+  - `mostrar_selector_nivel() -> None` — crea el rótulo y un botón por nivel en `marco_score`
+  - `elegir_nivel(indice) -> None` — `indice` es 0-based; fija nivel, llama `iniciar_partida()`, destruye los widgets y programa el loop
+  - `run()` — con el menú abierto arma los widgets y **no** programa el loop
   - `manejar_tecla(key)` — con el menú abierto solo atiende dígitos `1..N`; cualquier otra tecla se ignora
 
 - [ ] **Step 1: Write the failing tests**
 
-Agregar a `tests/test_game.py`:
+Agregar a `tests/test_game.py` una clase nueva, reutilizando `JuegoPrueba`,
+`datos()` y el helper `datos_niveles()` / `NIVELES_TRES` de la Task 3:
 
 ```python
 class TestMenuNiveles(unittest.TestCase):
 
-    def test_sin_menu_no_hay_textos(self):
-        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'BABY'))
+    def test_sin_menu_no_hay_botones(self):
+        # Un solo nivel: nada que elegir, el juego arranca solo como siempre
+        juego = JuegoPrueba(datos_niveles([{'nombre': 'BABY', 'tick': 0.15}], 'BABY'))
+        self.assertTrue(juego.iniciado)
         juego.run()
         self.assertEqual(juego.root.afters, [(50, juego.game_loop)])
-        self.assertEqual(juego.canvas.textos, [])
+        self.assertEqual(juego.botones_nivel, [])
 
-    def test_menu_dibuja_los_niveles_en_orden(self):
+    def test_menu_crea_un_boton_por_nivel_en_orden(self):
         juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'NYAN_CAT'))
         self.assertFalse(juego.iniciado)          # la partida no arranca sola
         juego.run()
-        self.assertEqual(juego.root.afters, [])   # el loop espera la eleccion
-        textos = [t[0] for t in juego.canvas.textos]
-        self.assertIn('ELIGE NIVEL', textos)
-        # Orden de declaracion del .brick, no orden alfabetico
-        i_baby = textos.index([t for t in textos if 'BABY' in t][0])
-        i_nyan = textos.index([t for t in textos if 'NYAN_CAT' in t][0])
-        self.assertTrue(i_baby < i_nyan)
-        # El nivel inicial aparece marcado
-        self.assertIn('NYAN_CAT', [t for t in textos if 'inicio' in t][0])
+        # El loop espera a la eleccion
+        self.assertEqual(juego.root.afters, [])
+        self.assertEqual([b.opciones['text'] for b in juego.botones_nivel],
+                         ['1. Baby', '2. Entusiasta', '3. Nyan Cat'])
+
+    def test_etiqueta_sale_del_identificador(self):
+        # El motor no tiene una tabla de nombres: traduce el identificador.
+        # NYAN_CAT -> 'Nyan Cat', sin tocar el .brick.
+        self.assertEqual(Game.etiqueta_nivel('NYAN_CAT'), 'Nyan Cat')
+        self.assertEqual(Game.etiqueta_nivel('BABY'), 'Baby')
+        self.assertEqual(Game.etiqueta_nivel('ENTUSIASTA'), 'Entusiasta')
 
     def test_tecla_elige_nivel_y_arranca(self):
         eventos = {'ON_START': [{'accion': 'SPAWN', 'objeto': 'X', 'params': []}]}
@@ -754,6 +760,26 @@ class TestMenuNiveles(unittest.TestCase):
         self.assertEqual(juego.acciones, [('SPAWN', 'X')])   # ON_START corrio
         self.assertTrue(juego.iniciado)
         self.assertEqual(juego.root.afters[-1], (50, juego.game_loop))
+
+    def test_click_elige_nivel_igual_que_la_tecla(self):
+        # El command del boton y la tecla llaman a la misma funcion
+        eventos = {'ON_START': [{'accion': 'SPAWN', 'objeto': 'X', 'params': []}]}
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'BABY', eventos))
+        juego.run()
+        juego.botones_nivel[1].opciones['command']()   # clic en '2. Entusiasta'
+        self.assertEqual(juego.nivel_actual, 'ENTUSIASTA')
+        self.assertEqual(juego.velocidad_gravedad, 0.1)
+        self.assertEqual(juego.acciones, [('SPAWN', 'X')])
+        self.assertTrue(juego.iniciado)
+        self.assertEqual(juego.root.afters[-1], (50, juego.game_loop))
+
+    def test_al_elegir_los_botones_desaparecen(self):
+        juego = JuegoPrueba(datos_niveles(NIVELES_TRES, 'BABY'))
+        juego.run()
+        self.assertFalse(any(b.destruido for b in juego.botones_nivel))
+        juego.manejar_input_gui(EventoFalso('1'))
+        self.assertTrue(all(b.destruido for b in juego.botones_nivel))
+        self.assertEqual(juego.botones_nivel, [])
 
     def test_con_el_menu_abierto_solo_sirven_los_digitos(self):
         eventos = {'ON_KEY_UP': [{'accion': 'MOVE', 'objeto': 'UP', 'params': []}]}
@@ -773,16 +799,6 @@ class TestMenuNiveles(unittest.TestCase):
         juego.manejar_input_gui(EventoFalso('1'))
         juego.manejar_input_gui(EventoFalso('Up'))
         self.assertEqual(juego.acciones, [('MOVE', 'UP')])
-
-    def test_nivel_sin_tick_no_muestra_tick(self):
-        niveles = [{'nombre': 'BABY'}, {'nombre': 'NYAN_CAT', 'tick': 0.06}]
-        juego = JuegoPrueba(datos_niveles(niveles, 'BABY'))
-        juego.run()
-        textos = [t[0] for t in juego.canvas.textos]
-        linea_baby = [t for t in textos if 'BABY' in t][0]
-        self.assertNotIn('TICK', linea_baby)
-        linea_nyan = [t for t in textos if 'NYAN_CAT' in t][0]
-        self.assertIn('TICK 0.06', linea_nyan)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -790,92 +806,105 @@ class TestMenuNiveles(unittest.TestCase):
 ```
 C:\Python27\python.exe -m unittest tests.test_game -v
 ```
-Expected: `AttributeError: 'Canvas' object has no attribute 'textos'`.
+Expected: `AttributeError: 'JuegoPrueba' object has no attribute 'botones_nivel'`.
 
-- [ ] **Step 3: Add `create_text` to the fake canvas in `tests/tk_falso.py`**
+- [ ] **Step 3: Run the test to confirm the failure moved past the fake Tkinter**
 
-En la clase `Canvas` (línea 53), reemplazar `__init__` para añadir la lista y
-añadir el método:
+Este paso existe para probar que `tests/tk_falso.py` no necesita cambios. Agregar
+temporalmente este test y ejecutarlo:
 
 ```python
-class Canvas(WidgetFalso):
-    def __init__(self, master=None, **opciones):
-        WidgetFalso.__init__(self, master, **opciones)
-        self.rectangulos = []
-        self.textos = []
-
-    def create_rectangle(self, x1, y1, x2, y2, **opciones):
-        self.rectangulos.append(((x1, y1, x2, y2), opciones.get('fill')))
-
-    def create_text(self, x, y, texto='', **opciones):
-        # El menu de niveles se dibuja con create_text; se guarda el texto y
-        # las opciones para poder afirmar el contenido en los tests.
-        self.textos.append((texto, x, y, opciones))
-
-    def delete(self, que):
-        if que == "all":
-            self.rectangulos = []
-            self.textos = []
+    def test_el_doble_de_tkinter_ya_soporta_botones(self):
+        import Tkinter as tk
+        marco = tk.Frame()
+        boton = tk.Button(marco, text='3. Nyan Cat', command=lambda: None)
+        self.assertEqual(boton.opciones['text'], '3. Nyan Cat')
+        self.assertTrue(callable(boton.opciones['command']))
+        self.assertEqual(len(marco.hijos), 1)
+        boton.destroy()
+        self.assertTrue(boton.destruido)
 ```
 
-- [ ] **Step 4: Run tests to verify the failure moved**
-
 ```
-C:\Python27\python.exe -m unittest tests.test_game -v
+C:\Python27\python.exe -m unittest tests.test_game.TestMenuNiveles.test_el_doble_de_tkinter_ya_soporta_botones -v
 ```
-Expected: los tests del menú ahora fallan por comportamiento
-(`test_tecla_elige_nivel_y_arranca` falla con
-`AssertionError: False is not True` en `juego.iniciado`), no por `AttributeError`.
+Expected: PASS en la primera corrida. Si falla, hay que revisar `tk_falso.py`
+antes de seguir. **Bórralo al terminar este paso**: prueba el doble de test, no
+el motor, y no debe quedarse en el archivo.
 
-- [ ] **Step 5: Implement the menu in `engine/game.py`**
+- [ ] **Step 4: Add the button state to `__init__` in `engine/game.py`**
 
-**(a) `run()`, reemplazando las dos líneas de la cabecera:**
+Junto a los atributos de nivel que agrega la Task 3 (después de `self.iniciado = False`):
+
+```python
+        self.botones_nivel = []   # widgets del menu de seleccion, vacio si no hay menu
+```
+
+- [ ] **Step 5: Implement `mostrar_selector_nivel()` and `elegir_nivel()`**
+
+Agregarlos junto a los métodos de nivel de la Task 3:
+
+```python
+    def etiqueta_nivel(self, nombre):
+        # La etiqueta sale del identificador, no de una tabla de nombres: asi el
+        # motor sigue sin saber que existe un nivel 'NYAN_CAT'. NYAN_CAT se
+        # muestra como 'Nyan Cat' sin que el .brick declare nada extra.
+        return nombre.replace('_', ' ').title()
+
+    def mostrar_selector_nivel(self):
+        # Botones apilados en el panel lateral que ya existe: pack() los apila
+        # y tk.Button da el clic con command, sin ventana nueva ni overlay.
+        rotulo = tk.Label(self.marco_score, text='ELIGE NIVEL',
+                          bg='#1e1e2e', fg='#03a80b',
+                          font=('Consolas', 12, 'bold'))
+        rotulo.pack(pady=(30, 10))
+        for i, nivel in enumerate(self.niveles):
+            # El numero es la tecla: elige por posicion en el orden del .brick,
+            # que es el orden de la lista (en py2.7 un dict lo perderia).
+            texto = '%d. %s' % (i + 1, self.etiqueta_nivel(nivel.get('nombre')))
+            # La tecla y el clic llaman a la MISMA funcion, para que las dos
+            # rutas no puedan desincronizarse.
+            boton = tk.Button(self.marco_score, text=texto,
+                              command=lambda i=i: self.elegir_nivel(i),
+                              font=('Consolas', 10), bg='#2a2a3e', fg='#03a80b',
+                              activebackground='#027b08', activeforeground='#1e1e2e',
+                              bd=0, padx=10, pady=5)
+            boton.pack(pady=4, padx=10)
+            self.botones_nivel.append(boton)
+        self._rotulo_nivel = rotulo
+
+    def elegir_nivel(self, indice):
+        self.nivel_actual = self.niveles[indice].get('nombre')
+        self.nivel_config = self.niveles[indice]
+        # Los widgets del menu se van: si se quedan, flotan sobre la partida.
+        for boton in self.botones_nivel:
+            boton.destroy()
+        self.botones_nivel = []
+        if getattr(self, '_rotulo_nivel', None):
+            self._rotulo_nivel.destroy()
+            self._rotulo_nivel = None
+        self.iniciar_partida()
+        self.root.after(50, self.game_loop)
+```
+
+El `lambda i=i: self.elegir_nivel(i)` es obligatorio: sin el `i=i` el lambda
+captura la variable del bucle y los tres botones terminarían eligiendo el
+último nivel.
+
+- [ ] **Step 6: `run()`, reemplazando la cabecera**
 
 ```python
     def run(self):
-        # Con 2+ niveles hay que preguntar antes de jugar: se dibuja el menu y
-        # NO se programa el loop. elegir_nivel() lo arranca.
+        # Con 2+ niveles hay que preguntar antes de jugar: se arma el menu y NO
+        # se programa el loop. elegir_nivel() lo arranca.
         if not self.iniciado:
-            self.dibujar_menu_nivel()
+            self.mostrar_selector_nivel()
         else:
             self.root.after(50, self.game_loop)
         self.root.mainloop()
 ```
 
-**(b) `dibujar_menu_nivel()` y `elegir_nivel()`, junto a los métodos de nivel
-de la Task 3:**
-
-```python
-    def dibujar_menu_nivel(self):
-        # Textos sobre el canvas existente: sin ventana ni Toplevel nuevo.
-        centro_x = self.ancho_canvas / 2
-        y = self.alto_canvas / 2 - self.taman_celda * (len(self.niveles) + 1)
-        self.canvas.create_text(centro_x, y, texto='ELIGE NIVEL',
-                                fill='#FFFFFF', font=('Consolas', 14, 'bold'))
-        for i, nivel in enumerate(self.niveles):
-            # La tecla elige por posicion: el orden es el del .brick, que es
-            # el orden de la lista (en py2.7 un dict lo perderia).
-            linea = '[%d] %s' % (i + 1, nivel.get('nombre'))
-            if 'tick' in nivel:
-                linea += '    TICK %s' % nivel['tick']
-            if nivel.get('nombre') == self.nivel_actual:
-                linea += '   <- inicio'
-            y += self.taman_celda
-            self.canvas.create_text(centro_x, y, texto=linea,
-                                    fill='#03a80b', font=('Consolas', 11))
-
-    def elegir_nivel(self, indice):
-        self.nivel_actual = self.niveles[indice].get('nombre')
-        self.nivel_config = self.niveles[indice]
-        self.iniciar_partida()
-        self.root.after(50, self.game_loop)
-```
-
-`self.alto_canvas / 2` usa división entera: en Python 2 `/` entre dos `int` ya
-trunca, y en Python 3 también con operandos `int`. Es lo mismo que ya hace
-`runtime.py:49` con `self.ancho // 2`.
-
-**(c) `manejar_tecla()`, reemplazando el cuerpo (línea 206):**
+- [ ] **Step 7: `manejar_tecla()`, reemplazando el cuerpo (línea 206)**
 
 ```python
     def manejar_tecla(self, key):
@@ -891,29 +920,30 @@ trunca, y en Python 3 también con operandos `int`. Es lo mismo que ya hace
             self.ejecutar_evento('ON_KEY_' + key)
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 8: Run tests to verify they pass**
 
 ```
 C:\Python27\python.exe -m unittest tests.test_game -v
 ```
 Expected: todos OK, incluido `test_loop` (línea 88) que no se modificó.
 
-- [ ] **Step 7: Run the full suite**
+- [ ] **Step 9: Run the full suite**
 
 ```
 C:\Python27\python.exe -m unittest discover -s tests -t .
 ```
 Expected: 59 tests, OK.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```
-git add engine/game.py tests/tk_falso.py tests/test_game.py
-git commit -m "engine: menu de seleccion de nivel con teclas 1..N
+git add engine/game.py tests/test_game.py
+git commit -m "engine: menu de nivel con botones apilados y clickeables
 
-Con 2+ niveles declarados la partida no arranca sola: se dibuja el menu en el
-canvas y se espera la tecla. El .brick clasico (un solo nivel) no ve cambio:
-iniciar_partida() corre igual que antes desde __init__.
+Los botones viven en el panel lateral que ya existe: pack los apila y tk.Button
+da el clic con command, sin ventana nueva. La tecla y el clic llaman a la misma
+elegir_nivel(), asi las dos rutas no pueden desincronizarse. La etiqueta sale del
+identificador con replace+title, asi que el motor no gana una tabla de nombres.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -930,17 +960,18 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `docs/Guia-BrickScript.txt`
 
 **Interfaces:**
-- Consumes: `LEVELS` del parser (Task 2), `hay_selector_nivel()`/`elegir_nivel()` (Task 4).
+- Consumes: `LEVELS` del parser (Task 2), `hay_selector_nivel()` / `elegir_nivel()` / `botones_nivel` (Tasks 3 y 4).
 - Produces: `games/snake_remake.brick` — un `.brick` jugable con tres niveles. Es la variante que `tests/test_retrocompatibilidad.py:15` ya excluye por nombre.
 
 - [ ] **Step 1: Write the failing integration test**
 
-Agregar a `tests/test_juegos.py`:
+Agregar a `TestJuegosReales` en `tests/test_juegos.py`:
 
 ```python
     def test_snake_remake_abre_menu_y_arranca_al_elegir(self):
         # snake_remake.brick declara tres niveles: la partida no arranca sola y
-        # el jugador elige con una tecla. snake.brick (clasico) no hace esto.
+        # el jugador elige con una tecla o con un clic. snake.brick (clasico)
+        # no hace esto.
         random.seed(1234)
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
         self.assertEqual(datos_juego['config']['start_level'], 'NYAN_CAT')
@@ -950,8 +981,11 @@ Agregar a `tests/test_juegos.py`:
         juego = crear_juego(datos_juego)
         self.assertFalse(juego.iniciado)
         self.assertEqual(juego.serpiente_cuerpo, [])
+        juego.run()                                   # abre el menu
+        self.assertEqual([b.opciones['text'] for b in juego.botones_nivel],
+                         ['1. Baby', '2. Entusiasta', '3. Nyan Cat'])
 
-        juego.manejar_tecla('2')            # ENTUSIASTA
+        juego.botones_nivel[1].opciones['command']()  # clic en Entusiasta
         self.assertTrue(juego.iniciado)
         self.assertEqual(juego.nivel_actual, 'ENTUSIASTA')
         self.assertEqual(juego.velocidad_gravedad, 0.1)
@@ -969,6 +1003,9 @@ Agregar a `tests/test_juegos.py`:
         juego = crear_juego(datos_juego)
         self.assertTrue(juego.iniciado)      # arranca solo, como siempre
         self.assertEqual(juego.velocidad_gravedad, 0.15)
+        juego.run()
+        self.assertEqual(juego.botones_nivel, [])
+        self.assertEqual(juego.root.afters, [(50, juego.game_loop)])
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -976,8 +1013,8 @@ Agregar a `tests/test_juegos.py`:
 ```
 C:\Python27\python.exe -m unittest tests.test_juegos.TestJuegosReales -v
 ```
-Expected: `KeyError: 'start_level'` — `snake_remake.brick` todavía no declara
-`LEVELS`, así que el compilador emite el default y la lista tiene un solo nivel.
+Expected: `AssertionError` en `start_level`, porque `snake_remake.brick` todavía
+no declara `LEVELS` y el compilador emite el default `BABY` con un solo nivel.
 
 - [ ] **Step 3: Write `games/snake_remake.brick`**
 
@@ -986,9 +1023,9 @@ eventos y los comentarios de control exactamente como están):
 
 ```
 # snake_remake.brick
-# Actividad 4 - Seccion C: niveles de dificultad desde la gramática.
+# Actividad 4 - Seccion C: niveles de dificultad desde la gramatica.
 # Los tres niveles se diferencian solo en la velocidad del tick. Las frutas
-# venenosas, las nubes y la geometría llegan en las secciones B y A.
+# venenosas, las nubes y la geometria llegan en las secciones B y A.
 GAME_TYPE SNAKE
 
 GAME_GRID (18, 18)
@@ -1000,9 +1037,10 @@ DEFINE SHAPE PIXEL:
 END
 
 # --- Niveles ---
-# START fija el nivel con el que arranca si el jugador no elige otro con las
-# teclas 1..3. El motor no sabe que existe un nivel llamado NYAN_CAT: solo
-# obedece lo que este bloque declara.
+# START fija el nivel con el que arranca si el jugador no elige otro. El motor
+# no sabe que existe un nivel llamado NYAN_CAT: solo obedece lo que este bloque
+# declara. En pantalla se muestran como '1. Baby', '2. Entusiasta' y
+# '3. Nyan Cat'.
 LEVELS:
   START: NYAN_CAT
   LEVEL BABY:
@@ -1114,13 +1152,16 @@ Agregar una sección siguiendo el formato de las existentes (la de
        Tetris 0.4).
      - START: <nombre>: nivel con el que arranca la partida. Sin START se
        usa el primer nivel declarado.
+     - Los nombres de nivel se escriben en MAYUSCULAS porque el lexer solo
+       reconoce identificadores en mayusculas.
      - Si el archivo no declara LEVELS, el motor asume el nivel BABY con la
        configuracion por defecto del juego. Por eso los .brick clasicos
        siguen funcionando sin cambios.
 
-     Cuando el archivo declara dos o mas niveles, el juego muestra un menu
-     antes de empezar y el jugador elige con las teclas 1, 2, 3... en el
-     orden en que estan declarados.
+     Cuando el archivo declara dos o mas niveles, el juego muestra un menu de
+     botones antes de empezar. Cada boton se puede hacer clic o elegir con su
+     numero (1, 2, 3...) segun el orden en que estan declarados los niveles.
+     El texto del boton sale del nombre: NYAN_CAT se muestra como 'Nyan Cat'.
 ```
 
 - [ ] **Step 8: Verify `games/*.json` is still ignored and nothing foreign slipped in**
@@ -1139,8 +1180,8 @@ git add games/snake_remake.brick tests/test_juegos.py docs/Guia-BrickScript.txt
 git commit -m "snake_remake: declara tres niveles de dificultad
 
 Agrega el bloque LEVELS al juego. START fija NYAN_CAT como nivel inicial y el
-menu deja elegir con las teclas 1..3. Los tres niveles se diferencian solo en
-el tick; las features de las secciones A y B llegan despues.
+menu deja elegir con clic o con las teclas 1..3. Los tres niveles se diferencian
+solo en el tick; las features de las secciones A y B llegan despues.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -1159,43 +1200,42 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 | 5.1 Lexer, 5.2 Parseo, 5.3 AST, 5.4 default Baby, 5.5 validaciones | Task 2 |
 | 6.1 Un solo camino, 6.2 Estado, 6.4 Lectura defensiva | Task 3 |
 | 6.3 Flujo de arranque | Task 3 + Task 4 |
-| 6.5 El menú | Task 4 |
+| 6.5 Menú de botones, 6.6 Doble de Tkinter | Task 4 |
 | 7. snake.brick / snake_remake.brick | Task 5 |
-| 8. Tests | Task 1-5 |
+| 8. Tests | Tasks 1-5 |
 | 9. Fuera de alcance | No implementado, a propósito |
 | 10. Orden de commits, restricción de versión | Global Constraints + los 5 commits |
 | 11. Cómo continúa A y B | Fuera de este plan |
 
 Sin huecos.
 
-**2. Step scan.** Cada paso deja una sola cosa razonable que escribir. El
-Step 3 de la Task 3 trae el cuerpo de los métodos porque las firmas y los tests
-no determinan los comentarios ni el orden exacto; los pasos de BNF (Task 2,
-Step 6) traen el texto porque es copia exacta. No hay pasos tipo "manejar
-casos borde".
+**2. Step scan.** Cada paso deja una sola cosa razonable que escribir. Los
+bloques de código son de test (que hay que escribir tal cual), de gramática
+(copia exacta del spec) y de los métodos del motor, donde el comentario explica
+el porqué y la firma ya fija el comportamiento. No hay pasos tipo "manejar casos
+borde". El Step 3 de la Task 4 es un paso de verificación con un test que se
+borra después; está justificado porque prueba que el plan no depende de tocar
+`tests/tk_falso.py`, que era el supuesto que había que verificar.
 
-**3. Type consistency.** `niveles` es lista en Task 2 (compilador) y en Task 3
-(motor), coherente con el cambio del spec 5.3. `config_de_nivel` se nombra igual
-en el Interfaces y en el código. `NIVEL_POR_DEFECTO` existe como constante de
-módulo **y** como atributo de clase en `Game` porque el test lo referencia como
-`Game.NIVEL_POR_DEFECTO`. `iniciar_partida` se llama desde `__init__` (Task 3) y
-desde `elegir_nivel` (Task 4). `hay_selector_nivel` se usa en `__init__` y en
-`run`.
+**3. Type consistency.** `niveles` es lista en Task 2 (compilador) y Task 3
+(motor), coherente con el spec 5.3. Todos los nombres que cruzan tareas son
+idénticos aquí, en los bloques de Interfaces y en el código de cada tarea:
+`niveles`, `nivel_actual`, `nivel_config`, `iniciado`, `config_de_nivel`,
+`hay_selector_nivel`, `aplicar_nivel`, `iniciar_partida`, `botones_nivel`,
+`etiqueta_nivel`, `mostrar_selector_nivel`, `elegir_nivel`.
 
-Todos los nombres que cruzan tareas son identicos aqui, en el bloque de
-Interfaces y en el codigo de cada tarea: `niveles`, `nivel_actual`,
-`nivel_config`, `iniciado`, `config_de_nivel`, `hay_selector_nivel`,
-`aplicar_nivel`, `iniciar_partida`, `dibujar_menu_nivel`, `elegir_nivel`.
+`etiqueta_nivel` se usa en los tests como `Game.etiqueta_nivel(...)` (classmethod
+o método normal, ambos se pueden llamar así sobre la clase) y en
+`mostrar_selector_nivel` como `self.etiqueta_nivel(...)`.
 
 **4. Review Focus.** Cada línea tiene su prueba:
 
 1. `test_sin_bloque_niveles_queda_baby` (T2), `test_nivel_por_defecto_en_los_clasicos` (T3), `test_snake_clasico_no_abre_menu` (T5)
 2. `test_json_sin_levels_no_revienta` (T3), `test_json_viejo_sin_levels_arranca` (T3)
-3. `test_menu_dibuja_los_niveles_en_orden` (T4), `test_snake_remake_abre_menu_y_arranca_al_elegir` (T5)
+3. `test_menu_crea_un_boton_por_nivel_en_orden` (T4), `test_snake_remake_abre_menu_y_arranca_al_elegir` (T5)
 4. `test_con_el_menu_abierto_solo_sirven_los_digitos` (T4), `test_snake_remake_abre_menu_y_arranca_al_elegir` (T5)
 5. `test_nivel_sin_tick_no_toca_el_default` (T3), `test_config_de_nivel` (T3), Step 6 de T3
 
-**5. Proportion.** El plan tiene ~5 tareas y 48 pasos; el spec tiene 12
-secciones. Los bloques de código son de test (que sí hay que escribir tal cual)
-y de las gramáticas (copia exacta). Los cuerpos de método vienen con su
-firma y su comentario. La proporción es razonable para TDD.
+**5. Proportion.** El plan tiene 5 tareas y 48 pasos; el spec tiene 12 secciones.
+Los bloques de código son de test, de gramática y de los métodos del motor con
+su comentario. La proporción es razonable para TDD.
