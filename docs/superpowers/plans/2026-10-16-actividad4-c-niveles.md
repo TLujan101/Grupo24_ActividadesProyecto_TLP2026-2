@@ -1164,14 +1164,14 @@ Agregar una sección siguiendo el formato de las existentes (la de
      El texto del boton sale del nombre: NYAN_CAT se muestra como 'Nyan Cat'.
 ```
 
-- [ ] **Step 8: Verify `games/*.json` is still ignored and nothing foreign slipped in**
+- [ ] **Step 8: Verify `games/*.json` is still ignored and the tree is clean**
 
 ```
 git status --short
 ```
 Expected: solo los archivos de esta tarea. `games/*.json` no debe aparecer
-(está en `.gitignore`) y **`games/tetris_reborn.brick` debe seguir apareciendo
-como modificado y sin stagear** — es trabajo de otro, no se toca.
+(está en `.gitignore`). Si `games/tetris_reborn.brick` apareciera modificado,
+es un cambio del usuario, no nuestro: no tocarlo ni stagearlo.
 
 - [ ] **Step 9: Commit**
 

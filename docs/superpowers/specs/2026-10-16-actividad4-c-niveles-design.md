@@ -375,9 +375,9 @@ Trabajo directo en `main`, un commit por paso:
 `compiler.py:1`). El código nuevo debe ser compatible con 2.7 *y* con 3.x:
 `.format()` o `%`, sin f-strings, sin `super()` sin argumentos.
 
-**No tocar:** `games/tetris_reborn.brick` tiene un cambio sin commitear
-(estados 3 y 4 de la pieza I) que pertenece a otro trabajo. No debe entrar en
-ningún commit de esta sección.
+**No tocar:** `games/tetris_reborn.brick` no participa en esta sección. Si
+aparece modificado en `git status` es un cambio del usuario, no nuestro: no
+stagearlo ni incluirlo en ningún commit.
 
 ## 11. Cómo continues A, B y D sobre esta base
 
@@ -395,5 +395,5 @@ ningún commit de esta sección.
 | Riesgo | Mitigación |
 |--------|------------|
 | El cambio del lexer rompe Tetris o las notas | Los enteros no cambian; `test_juegos.py` compila y corre los cuatro `.brick` de `games/` |
-| La rama de Tetris tiene trabajo sin commitear | No se incluye en ningún commit (sección 10) |
+| La rama de Tetris tiene trabajo sin commitear | Cada commit nombra sus archivos con `git add <ruta>`; `git status` se revisa en el paso final de la Task 5 |
 | El menú deja el juego colgado si el jugador no pulsa nada | Las teclas 1..N son la única forma de avanzar; documentado en la guía |
