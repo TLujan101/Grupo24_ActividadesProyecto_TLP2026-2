@@ -765,7 +765,7 @@ Una vez leída la rejilla, la melodía entera se controla con dos números:
 
 | Parámetro | Qué cambia |
 |---|---|
-| `SLOT_MS` | el tempo. 60 ms da un tema de 18.72 s |
+| `SLOT_MS` | el tempo. 90 ms da un tema de 28.08 s |
 | la octava fija | dónde cae la línea melódica. La mano derecha va en octava 5 |
 
 Cambiar el tempo es cambiar un número, ni una nota.

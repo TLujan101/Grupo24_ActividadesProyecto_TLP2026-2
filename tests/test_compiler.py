@@ -160,7 +160,7 @@ class TestTemaNyan(unittest.TestCase):
         self.assertEqual(cancion['wave'], 'SQUARE')
         self.assertNotIn('voces', cancion)
         self.assertEqual(cancion['notas'], esperadas)
-        self.assertEqual(sum(ms for _, ms in esperadas), 12 * 26 * 60)
+        self.assertEqual(sum(ms for _, ms in esperadas), 12 * 26 * 90)
 
 
 class TestParserNiveles(unittest.TestCase):
