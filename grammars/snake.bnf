@@ -6,7 +6,9 @@
 <opcional_niveles> ::= "" | <niveles>
 <eventos>    ::= <evento> | <evento> <eventos>
 
-<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <extras> ":" <estados> "END"
+<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <geometria> <extras> ":" <estados> "END"
+<geometria> ::= "" | "GEOMETRY" <forma_geometrica>
+<forma_geometrica> ::= "RECT" | "CIRCLE" | "TRIANGLE" | "NYAN_CAT"
 <extras> ::= "" | "COLOR" <identificador> | "CHANCE" <numero> | "COLOR" <identificador> "CHANCE" <numero>
 <estados>          ::= <estado> | <estado> <estados>
 <estado>           ::= "STATE" <numero> ":" <matriz>
@@ -28,11 +30,16 @@
 <letra_a_g>   ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
 
 <evento>         ::= "ON" <nombre_evento_snake> ":" <acciones_snake> "END"
-<nombre_evento_snake> ::= "START" | "TICK" | "EAT_FOOD" | "GAME_OVER" | "COLLISION_WALL" | "COLLISION_SELF" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
+<nombre_evento_snake> ::= "START" | "TICK" | "EAT_FOOD" | "EAT_POWERUP" | "EAT_POISON" | "GAME_OVER" | "COLLISION_WALL" | "COLLISION_SELF" | "COLLISION_CLOUD" | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT"
 <acciones_snake>     ::= <accion_snake> | <accion_snake> <acciones_snake>
 
-<accion_snake> ::= <accion_spawn_jugador> | <accion_spawn_comida> | <accion_mover> | <accion_direccion> | <accion_puntos> | <accion_crecer> | <accion_gameover> | <accion_musica> | <accion_efecto> | <accion_parar_musica>
+<accion_snake> ::= <accion_spawn_jugador> | "accion_invulnerabilidad" | <accion_spawn_comida> | <accion_spawn_veneno> | <accion_spawn_powerup> | <accion_spawn_nube> | <accion_spawn_comida> | <accion_mover> | <accion_direccion> | <accion_puntos> | <accion_crecer> | <accion_gameover> | <accion_musica> | <accion_efecto> | <accion_parar_musica>
 <accion_spawn_jugador> ::= "SPAWN" "PLAYER" "AT" <coordenadas>
+<accion_invulnerabilidad> ::= "GRANT_INVULNERABILITY" <numero>
+<accion_spawn_comida>  ::= "SPAWN" "FOOD" "AT" "RANDOM"
+<accion_spawn_veneno>  ::= "SPAWN" "POISON" "AT" "RANDOM"
+<accion_spawn_powerup> ::= "SPAWN" "POWERUP" "AT" "RANDOM"
+<accion_spawn_nube>    ::= "SPAWN" "CLOUD" "AT" <coordenadas_o_random>
 <accion_spawn_comida>  ::= "SPAWN" "FOOD" "AT" "RANDOM"
 <accion_mover>         ::= "MOVE" "PLAYER" "FORWARD"
 <accion_direccion>     ::= "SET_DIRECTION" <direccion>
@@ -44,6 +51,7 @@
 <accion_parar_musica>  ::= "STOP_MUSIC"
 
 <coordenadas>   ::= "(" <numero> "," <numero> ")"
+<coordenadas_o_random> ::= <coordenadas> | "RANDOM"
 <direccion>     ::= "UP" | "DOWN" | "LEFT" | "RIGHT"
 
 * --- Niveles de dificultad (opcional) ---
@@ -63,11 +71,12 @@
 <elegir_nivel>     ::= "" | "START" ":" <identificador>
 <definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
 <definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
-<modificadores_nivel> ::= "" | <modificador_nivel> | <modificador_nivel> <modificadores_nivel>
-<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador>
+<modificadores_nivel> ::= "" | <modificador_nivel> | <modificador_nivel> <modificadores_nivel> 
+<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador> | "INVULNERABILITY_DURATION" <numero> | "GEOMETRY" <forma_geometrica> <modificador_nivel> | "POISON_ENABLED" <estado_booleano> | "CLOUDS_COUNT" <numero>
 
 <identificador> ::= <letra> | <letra> <identificador>
 <numero>        ::= <digito> | <digito> <numero>
 <real>          ::= <numero> | <numero> "." <numero>
+<estado_booleano> ::= "TRUE" | "FALSE"
 <letra>         ::= "A"..."Z" | "_"
 <digito>        ::= "0"..."9"
