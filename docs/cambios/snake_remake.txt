@@ -1,0 +1,42 @@
+Documentación de Cambios: Sistema de Dificultad y Geometrías en Snake (BrickScript)
+Este documento detalla las modificaciones incrementales realizadas para implementar un sistema de multi-nivel de dificultad (Baby, Entusiasta, Nyan Cat), la integración de nuevas propiedades de configuración en el lenguaje DSL (.brick), y su correcta interpretación y renderizado en el motor en Python (snake.py).
+
+
+1. Modificaciones en el Lenguaje DSL y Gramática (.brick / .bnf)
+Se extendió la gramática y el archivo de definición del juego para soportar parámetros granulares por cada nivel de dificultad:
+
+Nuevos Modificadores de Nivel:
+
+POISON_ENABLED: Define si las frutas venenosas están habilitadas (TRUE / FALSE).
+CLOUDS_COUNT: Define la cantidad exacta de nubes obstáculo que se generan al iniciar el nivel.
+INVULNERABILITY_DURATION: Controla los segundos que dura el power-up de invulnerabilidad.
+GEOMETRY: Permite asignar formas geométricas específicas al nivel (RECT, CIRCLE, TRIANGLE, NYAN_CAT).
+
+Estructura de Niveles en snake_remake.brick:
+
+BABY: TICK 0.18, GEOMETRY RECT, POISON_ENABLED FALSE, CLOUDS_COUNT 0.
+ENTUSIASTA: TICK 0.12, GEOMETRY TRIANGLE, POISON_ENABLED TRUE, INVULNERABILITY_DURATION 10, CLOUDS_COUNT 0.
+NYAN_CAT: TICK 0.06, GEOMETRY NYAN_CAT, POISON_ENABLED TRUE, INVULNERABILITY_DURATION 15, CLOUDS_COUNT 3.
+
+
+2. Actualizaciones en el Compilador (compiler.py)
+Se actualizó la tabla de mapeo de modificadores (MODIFICADORES_NIVEL) para que reconozca POISON_ENABLED y CLOUDS_COUNT.
+Se ajustó el parser del compilador para procesar valores booleanos (TRUE/FALSE) y numéricos enteros sin comprometer la validación de sintaxis ni generar errores críticos al exportar al archivo de datos estructurados consumido por el motor.
+
+
+3. Modificaciones en el Motor de Juego (snake.py)
+Se reestructuró la lógica interna de snake.py para desacoplar los elementos estáticos del evento global ON START y delegarlos de forma dinámica según la configuración del nivel activo:
+
+Lectura de Configuración del Nivel:
+
+Se mejoró el método cargar_configuracion_nivel y elegir_nivel para extraer con precisión la geometría, la duración de la invulnerabilidad, el flag de veneno y la cantidad de nubes ya sea por índice numérico o por el nombre del nivel.
+
+Generación Dinámica de Elementos (generar_elementos_por_nivel):
+
+Se separó la lógica de instanciación para que las nubes se generen de acuerdo al número configurado (CLOUDS_COUNT), el veneno aparezca únicamente si POISON_ENABLED es TRUE, y el power-up se cargue solo si hay una duración de invulnerabilidad válida.
+
+Renderizado y Geometrías:
+
+Corrección en la asignación de variables de render (taman_celda) para evitar conflictos en las formas circulares y triangulares.
+Implementación de la animación de cola arcoíris basada en un contador de fotogramas (frame_counter) para el nivel Nyan Cat.
+Ajuste del color predeterminado de la cabeza de la serpiente en niveles estándar a un tono verde oscuro diferenciado del cuerpo.
