@@ -2,108 +2,269 @@
 # snake.py --- Juego SNAKE (GAME_TYPE SNAKE). Hereda todo lo basico de Game.
 
 import random
-
 from .game import Game
-
-COLOR_SNAKE_CABEZA = '#00FF00' # Verde brillante
-COLOR_SNAKE_CUERPO = '#33CC33' # Verde normal
-COLOR_FOOD = '#FF0000'      # Rojo
-
+from .utilidades import Colores, Arcoiris
 
 class Snake(Game):
 
     # CONFIGURACION PROPIA DEL JUEGO (sobreescribe a Game)
     # ----------------------------------------------------
+    def cargar_configuracion_nivel(self, nivel_data):
+        """El motor lee la configuración completa definida en el .brick"""
+        if nivel_data and isinstance(nivel_data, dict):
+            self.geometria_nivel = str(nivel_data.get('geometry', 'RECT')).upper()
+            self.duracion_inv_config = int(nivel_data.get('invulnerability_duration', 0))
+            self.permitir_veneno = bool(nivel_data.get('poison_enabled', False))
+            self.cantidad_nubes = int(nivel_data.get('clouds_count', 0))
+            
+            # Generar los elementos del nivel inmediatamente al cargarlo
+            self.generar_elementos_por_nivel()
 
     def inicializar_estado(self):
         self.serpiente_cuerpo = []
         self.serpiente_direccion = (1, 0)
         self.direccion_pendiente = None
+        
         self.posicion_comida = None
+        self.posicion_veneno = None
+        self.posicion_powerup = None
+        self.nubes = []
+        
         self.crecimiento_pendiente = 0
         self.velocidad_gravedad = 0.15
+        
+        if not hasattr(self, 'geometria_nivel') or not self.geometria_nivel:
+            self.geometria_nivel = "RECT"
+        self.tiempo_invulnerable = 0
+        self.frame_counter = 0
+
+    def iniciar_partida(self):
+        """Se ejecuta al iniciar la partida después de elegir nivel"""
+        if hasattr(super(Snake, self), 'iniciar_partida'):
+            super(Snake, self).iniciar_partida()
+        
+        # Asegurar generación al arrancar la partida
+        self.generar_elementos_por_nivel()
+
+    def generar_elementos_por_nivel(self):
+        self.nubes = []
+        self.posicion_veneno = None
+        self.posicion_powerup = None
+        
+        # 1. Nubes según CLOUDS_COUNT
+        for _ in range(getattr(self, 'cantidad_nubes', 0)):
+            self.snake_spawn_nube()
+            
+        # 2. Veneno si POISON_ENABLED es True
+        if getattr(self, 'permitir_veneno', False):
+            self.snake_spawn_veneno()
+            
+        # 3. Power-up si hay duración de invulnerabilidad
+        if getattr(self, 'duracion_inv_config', 0) > 0:
+            self.snake_spawn_powerup()
+
+    def snake_spawn_nube(self, accion=None):
+        params = (accion or {}).get('params', [])
+        if params and params[0] != 'RANDOM':
+            coords = params[0]
+            self.nubes.append((coords[0], coords[1]))
+        else:
+            pos = self._obtener_posicion_libre()
+            if pos:
+                self.nubes.append(pos)
+    
+    def snake_spawn_veneno(self):
+        pos = self._obtener_posicion_libre()
+        if pos:
+            self.posicion_veneno = pos
+
+    def snake_spawn_powerup(self):
+        pos = self._obtener_posicion_libre()
+        if pos:
+            self.posicion_powerup = pos
+
+    def elegir_nivel(self, nombre_nivel):
+        """Intercepta la selección de nivel y extrae todos sus parámetros"""
+        if hasattr(super(Snake, self), 'elegir_nivel'):
+            super(Snake, self).elegir_nivel(nombre_nivel)
+        
+        self.nivel_actual = nombre_nivel
+        lvl_val = None
+        
+        if hasattr(self, 'datos_juego'):
+            niveles = self.datos_juego.get('levels', [])
+            
+            if isinstance(nombre_nivel, int) or (isinstance(nombre_nivel, str) and str(nombre_nivel).isdigit()):
+                idx = int(nombre_nivel)
+                if isinstance(niveles, list) and 0 <= idx < len(niveles):
+                    lvl_val = niveles[idx]
+            elif isinstance(niveles, list):
+                for l in niveles:
+                    if isinstance(l, dict):
+                        nombre_json = l.get('nombre') or l.get('name')
+                        if str(nombre_json).upper() == str(nombre_nivel).upper():
+                            lvl_val = l
+                            break
+            elif isinstance(niveles, dict):
+                for lvl_key, l in niveles.items():
+                    if str(lvl_key).upper() == str(nombre_nivel).upper():
+                        if isinstance(l, dict):
+                            lvl_val = l
+                            break
+                            
+        if isinstance(lvl_val, dict):
+            self.cargar_configuracion_nivel(lvl_val)
 
     def ejecutar_accion(self, verbo, objeto, accion):
-        if verbo == 'SPAWN' and objeto == 'PLAYER': self.snake_spawn_jugador(accion)
-        if verbo == 'SPAWN' and objeto == 'FOOD': self.snake_spawn_comida()
-        if verbo == 'MOVE' and objeto == 'PLAYER': self.snake_mover_jugador()
-        if verbo == 'SET_DIRECTION': self.snake_cambiar_direccion(objeto)
-        if verbo == 'GROW': self.snake_crecer(objeto, accion)
+        if verbo == 'SPAWN':
+            if objeto == 'PLAYER': self.snake_spawn_jugador(accion)
+            elif objeto == 'FOOD': self.snake_spawn_comida()
+            elif objeto == 'POISON': self.snake_spawn_veneno()
+            elif objeto == 'POWERUP': self.snake_spawn_powerup()
+            elif objeto == 'CLOUD': self.snake_spawn_nube(accion)
+        elif verbo == 'MOVE' and objeto == 'PLAYER': 
+            self.snake_mover_jugador()
+        elif verbo == 'SET_DIRECTION': 
+            self.snake_cambiar_direccion(objeto)
+        elif verbo == 'GROW': 
+            self.snake_crecer(objeto, accion)
+        elif verbo == 'GRANT_INVULNERABILITY':
+            self.conceder_invulnerabilidad(objeto)
+        elif verbo == 'RESET_SCORE':
+            self.score = 0
 
-    def dibujar_elementos(self):
-        # Comida
-        if self.posicion_comida:
-            x, y = self.posicion_comida
-            self.dibujar_celda(x, y, COLOR_FOOD)
-        # Cuerpo de la Serpiente
-        for i, segmento in enumerate(self.serpiente_cuerpo):
-            x, y = segmento
-            color = COLOR_SNAKE_CABEZA if i == 0 else COLOR_SNAKE_CUERPO
+    def dibujar_circulo_celda(self, x, y, color):
+        """Dibuja un círculo exacto usando el canvas y la variable correcta del motor"""
+        if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
+            x1 = x * self.taman_celda + 2
+            y1 = y * self.taman_celda + 2
+            x2 = (x + 1) * self.taman_celda - 2
+            y2 = (y + 1) * self.taman_celda - 2
+            self.canvas.create_oval(x1, y1, x2, y2, fill=color, outline="")
+        else:
             self.dibujar_celda(x, y, color)
 
+    def dibujar_triangulo_celda(self, x, y, color):
+        """Dibuja un triángulo exacto usando el canvas y la variable correcta del motor"""
+        if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
+            x1 = x * self.taman_celda
+            y1 = y * self.taman_celda
+            x2 = x1 + self.taman_celda
+            y2 = y1 + self.taman_celda
+            puntos = [x1 + self.taman_celda / 2.0, y1 + 2, x1 + 2, y2 - 2, x2 - 2, y2 - 2]
+            self.canvas.create_polygon(puntos, fill=color, outline="")
+        else:
+            self.dibujar_celda(x, y, color)
 
-    # METODOS DE LOGICA DE JUEGO
-    # --------------------------
+    def dibujar_elementos(self):
+        # Incrementar el contador de frames para animar el arcoíris en cada ciclo de renderizado
+        self.frame_counter = getattr(self, 'frame_counter', 0) + 1
+
+        # 1. Dibujar Nubes Obstáculo
+        for nube in self.nubes:
+            self.dibujar_celda(nube[0], nube[1], Colores.get("WHITE", '#A9A9A9'))
+
+        # 2. Dibujar Comida, Veneno y Power-up
+        if self.posicion_comida:
+            self.dibujar_celda(self.posicion_comida[0], self.posicion_comida[1], Colores.get("RED", '#FF0000'))
+        if self.posicion_veneno:
+            self.dibujar_celda(self.posicion_veneno[0], self.posicion_veneno[1], Colores.get("PURPLE", '#800080'))
+        if self.posicion_powerup:
+            self.dibujar_celda(self.posicion_powerup[0], self.posicion_powerup[1], Colores.get("YELLOW", '#FFD700'))
+
+        # 3. Cuerpo y Cabeza de la Serpiente
+        geo = str(getattr(self, 'geometria_nivel', 'RECT')).upper()
+
+        for i, segmento in enumerate(self.serpiente_cuerpo):
+            x, y = segmento
+
+            # Asignación de colores usando Arcoiris y Colores desde utilidades.py
+            if geo == "NYAN_CAT":
+                if i == 0:
+                    color = Colores.get("GRAY", "#7D7D7D")  # Gris para la cabeza
+                else:
+                    # Rotar los colores del arcoíris dinámicamente con el frame counter
+                    indice_arcoiris = (i - 1 + self.frame_counter) % len(Arcoiris)
+                    color = Arcoiris[indice_arcoiris]
+            else:
+                color = Colores.get("DARK GREEN", "#2EB72E") if i == 0 else Colores.get("GREEN", '#33CC33')
+
+            # Renderizado físico según la geometría del nivel deseado
+            if geo == "CIRCLE" or geo == "NYAN_CAT":
+                # Tanto la cabeza como la cola de Nyan Cat y el modo círculo usan óvalos
+                self.dibujar_circulo_celda(x, y, color)
+            elif geo == "TRIANGLE":
+                # El nivel Entusiasta usa triángulos en todos sus segmentos
+                self.dibujar_triangulo_celda(x, y, color)
+            else:
+                # Por defecto rectángulo (Baby / RECT)
+                self.dibujar_celda(x, y, color)
+
+    # METODOS DE LOGICA DE JUEGO Y ENTIDADES
+    # ----------------------------------------------------
 
     def snake_spawn_jugador(self, accion):
         coords = accion['params'][0] if accion['params'] else [self.ancho // 2, self.alto // 2]
         self.serpiente_cuerpo = [(coords[0], coords[1])]
         self.serpiente_direccion = (1, 0)
 
-    def snake_spawn_comida(self):
-        # Tablero lleno = victoria: no hay donde poner comida
+    def inicializar_estado(self):
+        self.serpiente_cuerpo = []
+        self.serpiente_direccion = (1, 0)
+        self.direccion_pendiente = None
+        
+        self.posicion_comida = None
+        self.posicion_veneno = None
+        self.posicion_powerup = None
+        self.nubes = []
+        
+        self.crecimiento_pendiente = 0
+        self.velocidad_gravedad = 0.15
+        
+        if not hasattr(self, 'geometria_nivel') or not self.geometria_nivel:
+            self.geometria_nivel = "RECT"
+        self.tiempo_invulnerable = 0
+        self.frame_counter = 0
+
+    def iniciar_partida(self):
+        """Se ejecuta al iniciar la partida después de elegir nivel"""
+        if hasattr(super(Snake, self), 'iniciar_partida'):
+            super(Snake, self).iniciar_partida()
+        
+        # Generar elementos dinámicamente según la configuración del nivel activo
+        self.generar_elementos_por_nivel()
+
+    def generar_elementos_por_nivel(self):
+        self.nubes = []
+        self.posicion_veneno = None
+        self.posicion_powerup = None
+        
+        # 1. Nubes según CLOUDS_COUNT
+        for _ in range(getattr(self, 'cantidad_nubes', 0)):
+            self.snake_spawn_nube()
+            
+        # 2. Veneno si POISON_ENABLED es True
+        if getattr(self, 'permitir_veneno', False):
+            self.snake_spawn_veneno()
+            
+        # 3. Power-up si hay duración de invulnerabilidad
+        if getattr(self, 'duracion_inv_config', 0) > 0:
+            self.snake_spawn_powerup()
+
+    def _obtener_posicion_libre(self):
         if len(self.serpiente_cuerpo) >= self.ancho * self.alto:
-            self.juego_terminado = True
-            return
+            return None
         while True:
             x, y = random.randint(0, self.ancho - 1), random.randint(0, self.alto - 1)
-            if (x, y) not in self.serpiente_cuerpo:
-                self.posicion_comida = (x, y)
-                break
+            pos = (x, y)
+            if pos not in self.serpiente_cuerpo and pos not in self.nubes and pos != self.posicion_comida:
+                return pos
 
-    def snake_mover_jugador(self):
-        if not self.serpiente_cuerpo: return
-        # Un giro por tick: el giro pedido se aplica al moverse
-        if self.direccion_pendiente is not None:
-            self.serpiente_direccion = self.direccion_pendiente
-            self.direccion_pendiente = None
-        cabeza_x, cabeza_y = self.serpiente_cuerpo[0]
-        dir_x, dir_y = self.serpiente_direccion
-        nueva_cabeza = (cabeza_x + dir_x, cabeza_y + dir_y)
-
-        if not (0 <= nueva_cabeza[0] < self.ancho and 0 <= nueva_cabeza[1] < self.alto):
-            self.ejecutar_evento('ON_COLLISION_WALL')
-            return
-
-        # Con crecimiento pendiente la cola no se mueve: chocar con ella si mata
-        cuerpo_solido = self.serpiente_cuerpo if self.crecimiento_pendiente > 0 else self.serpiente_cuerpo[:-1]
-        if nueva_cabeza in cuerpo_solido:
-            self.ejecutar_evento('ON_COLLISION_SELF')
-            return
-
-        self.serpiente_cuerpo.insert(0, nueva_cabeza)
-
-        if nueva_cabeza == self.posicion_comida:
-            self.ejecutar_evento('ON_EAT_FOOD')
-
-        # El crecimiento lo manda el .brick via GROW; sin pendiente se quita la cola
-        if self.crecimiento_pendiente > 0:
-            self.crecimiento_pendiente -= 1
-        else:
-            self.serpiente_cuerpo.pop()
-
-    def snake_cambiar_direccion(self, direccion):
-        # Se encola para el proximo tick (un giro por tick): asi dos teclas
-        # rapidas no suman un giro de 180 contra el cuerpo. Se valida contra
-        # la direccion actual, asi cambiar de opinion antes del tick vale.
-        if direccion == 'UP' and self.serpiente_direccion[1] != 1:
-            self.direccion_pendiente = (0, -1)
-        elif direccion == 'DOWN' and self.serpiente_direccion[1] != -1:
-            self.direccion_pendiente = (0, 1)
-        elif direccion == 'LEFT' and self.serpiente_direccion[0] != 1:
-            self.direccion_pendiente = (-1, 0)
-        elif direccion == 'RIGHT' and self.serpiente_direccion[0] != -1:
-            self.direccion_pendiente = (1, 0)
+    def conceder_invulnerabilidad(self, segundos):
+        try:
+            self.tiempo_invulnerable = int(segundos)
+        except (ValueError, TypeError):
+            self.tiempo_invulnerable = 5
 
     def snake_crecer(self, objeto=None, accion=None):
         cantidad = 1
@@ -113,6 +274,88 @@ class Snake(Game):
                 cantidad = int(params[0])
         except (ValueError, TypeError):
             cantidad = 1
-        if cantidad < 1:
+        
+        if cantidad >= 1:
+            self.crecimiento_pendiente += cantidad
+    
+    
+
+    def snake_mover_jugador(self):
+        if not self.serpiente_cuerpo: return
+        
+        if self.tiempo_invulnerable > 0:
+            self.tiempo_invulnerable -= 1
+
+        if self.direccion_pendiente is not None:
+            self.serpiente_direccion = self.direccion_pendiente
+            self.direccion_pendiente = None
+            
+        cabeza_x, cabeza_y = self.serpiente_cuerpo[0]
+        dir_x, dir_y = self.serpiente_direccion
+        nueva_cabeza = (cabeza_x + dir_x, cabeza_y + dir_y)
+
+        es_invulnerable = self.tiempo_invulnerable > 0
+
+        # 1. Validar colisión con paredes
+        if not (0 <= nueva_cabeza[0] < self.ancho and 0 <= nueva_cabeza[1] < self.alto):
+            if not es_invulnerable:
+                self.ejecutar_evento('ON_COLLISION_WALL')
             return
-        self.crecimiento_pendiente += cantidad
+
+        # 2. Validar colisión con nubes
+        if hasattr(self, 'nubes') and nueva_cabeza in self.nubes:
+            if not es_invulnerable:
+                # Obtener el puntaje actual (compatible con self.score o self.puntuacion)
+                puntos_actuales = getattr(self, 'score', getattr(self, 'puntuacion', 0))
+                
+                if puntos_actuales > 0:
+                    # Si tiene puntos, pierde todos los puntos pero sigue vivo
+                    if hasattr(self, 'score'):
+                        self.score = 0
+                    if hasattr(self, 'puntuacion'):
+                        self.puntuacion = 0
+                    self.ejecutar_evento('ON_COLLISION_CLOUD')
+                    # Opcional: permitir que avance o sacarla de la nube para que no se congele
+                else:
+                    # Si no tiene puntos, es Game Over
+                    self.ejecutar_evento('GAME_OVER')
+            return
+
+        # 3. Validar auto-colisión
+        comiendo = (nueva_cabeza == self.posicion_comida)
+        cuerpo_solido = self.serpiente_cuerpo if (self.crecimiento_pendiente > 0 or comiendo) else self.serpiente_cuerpo[:-1]
+        
+        if nueva_cabeza in cuerpo_solido:
+            if not es_invulnerable:
+                self.ejecutar_evento('ON_COLLISION_SELF')
+            return
+
+        # 4. Insertar la nueva cabeza
+        self.serpiente_cuerpo.insert(0, nueva_cabeza)
+
+        # 5. Comprobar consumo de elementos
+        if nueva_cabeza == self.posicion_comida:
+            self.ejecutar_evento('ON_EAT_FOOD')
+            self.posicion_comida = self._obtener_posicion_libre()
+        elif hasattr(self, 'posicion_veneno') and nueva_cabeza == self.posicion_veneno:
+            self.ejecutar_evento('ON_EAT_POISON')
+            self.posicion_veneno = self._obtener_posicion_libre()
+        elif hasattr(self, 'posicion_powerup') and nueva_cabeza == self.posicion_powerup:
+            self.ejecutar_evento('ON_EAT_POWERUP')
+            self.posicion_powerup = self._obtener_posicion_libre()
+
+        # 6. Manejar crecimiento o recortar la cola
+        if self.crecimiento_pendiente > 0:
+            self.crecimiento_pendiente -= 1
+        else:
+            self.serpiente_cuerpo.pop()
+
+    def snake_cambiar_direccion(self, direccion):
+        if direccion == 'UP' and self.serpiente_direccion[1] != 1:
+            self.direccion_pendiente = (0, -1)
+        elif direccion == 'DOWN' and self.serpiente_direccion[1] != -1:
+            self.direccion_pendiente = (0, 1)
+        elif direccion == 'LEFT' and self.serpiente_direccion[0] != 1:
+            self.direccion_pendiente = (-1, 0)
+        elif direccion == 'RIGHT' and self.serpiente_direccion[0] != -1:
+            self.direccion_pendiente = (1, 0)
