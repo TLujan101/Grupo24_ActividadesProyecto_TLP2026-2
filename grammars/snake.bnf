@@ -72,7 +72,7 @@
 <definiciones_nivel> ::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
 <definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
 <modificadores_nivel> ::= "" | <modificador_nivel> | <modificador_nivel> <modificadores_nivel> 
-<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador> | "INVULNERABILITY_DURATION" <numero> | "GEOMETRY" <forma_geometrica> <modificador_nivel> | "POISON_ENABLED" <estado_booleano> | "CLOUDS_COUNT" <numero>
+<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador> | "INVULNERABILITY_DURATION" <numero> | "GEOMETRY" <forma_geometrica> <modificador_nivel> | "POISON_ENABLED" <estado_booleano> | "POISON_KILLS" <estado_booleano> | "CLOUDS_COUNT" <numero>
 
 <identificador> ::= <letra> | <letra> <identificador>
 <numero>        ::= <digito> | <digito> <numero>

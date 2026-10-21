@@ -23,18 +23,30 @@ SILENCIO = 'REST'
 ONDA_SENOIDAL = 'SINE'
 ONDAS = ('SINE', 'SQUARE')
 
+# Scanner: una regex por clase de token. El orden emula maximal munch (Python
+# se queda con la primera que casa, no con la mas larga): NOTA antes que
+# PALABRA para no partir E5, y NUMERO con el decimal pegado para no partir
+# 0.15. El nombre solo documenta; los tokens siguen siendo strings.
+PATRONES_TOKEN = [
+    ('NOTA', r'\b[A-G]#?[0-9]+\b'),   # E5, D#4
+    ('PALABRA', r'\b[A-Z_]+\b'),      # GAME_TYPE, NYAN_CAT
+    ('NUMERO', r'\d+(?:\.\d+)?'),     # 10, 0.15
+    ('SIMBOLO', r'[\[\](),:]'),       # [ ] ( ) , :
+]
+
+# '#' tras A-G es sostenido (D#4); en cualquier otro caso abre comentario.
+PATRON_COMENTARIO = r'(?<![A-G])#.*'
+
+# (?:...) hace que findall devuelva el token completo, no sus grupos.
+RE_TOKEN = re.compile(
+    '|'.join('(?:' + patron + ')' for _, patron in PATRONES_TOKEN))
+RE_COMENTARIO = re.compile(PATRON_COMENTARIO)
+
+
 def lexer(codigo_fuente):
-    # Un '#' precedido por letra A-G no abre comentario: es el sostenido de una
-    # nota (D#4). Si lo abriera, se comia el resto de la linea y con ella la
-    # duracion de la nota.
-    codigo_fuente = re.sub(r'(?<![A-G])#.*', '', codigo_fuente)
-    # Un nombre de nota (E5, D#4) es un token propio: si no, el lexer
-    # partia "E5" en "E" y "5" y la nota se colaba como texto no reconocido.
-    # El grupo de decimales va pegado al de enteros: suelto, \d+ se comia el 0
-    # de 0.15 y el punto caia en resto como caracter no reconocido.
-    token_regex = r'\b[A-G]#?[0-9]+\b|\b[A-Z_]+\b|\d+(?:\.\d+)?|[\[\](),:]'
-    tokens = re.findall(token_regex, codigo_fuente)
-    resto = re.sub(token_regex, '', codigo_fuente)
+    codigo_fuente = RE_COMENTARIO.sub('', codigo_fuente)
+    tokens = RE_TOKEN.findall(codigo_fuente)
+    resto = RE_TOKEN.sub('', codigo_fuente)
     if resto.strip():
         raise Exception("Caracteres no reconocidos: '" + resto.strip()[:40] + "'")
     return tokens
@@ -196,7 +208,7 @@ class Parser:
     # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
     # que la tecla 2 elegiria un nivel arbitrario.
 
-    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'identificador'), 'CLOUDS_COUNT': ('clouds_count', 'numero')}
+    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero')}
 
     def parsear_niveles(self):
         # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END
@@ -406,6 +418,14 @@ class Parser:
                 nivel[clave] = self.consumir_decimal()
             elif tipo == 'numero':
                 nivel[clave] = self.consumir_numero()
+            elif tipo == 'booleano':
+                if self.ver() is None or self.ver() == 'END':
+                    raise Exception("Error de sintaxis: se esperaba el valor o nombre del "
+                                    "modificador del nivel '" + nombre + "'")
+                # TRUE/FALSE llegan como PALABRA. Sin convertirlo el motor
+                # recibe el string 'FALSE' y bool('FALSE') es True: el veneno
+                # se activaria en el nivel que lo apaga.
+                nivel[clave] = str(self.consumir()).upper() == 'TRUE'
             else:
                 if self.ver() is None or self.ver() == 'END':
                     raise Exception("Error de sintaxis: se esperaba el valor o nombre del "

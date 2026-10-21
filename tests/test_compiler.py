@@ -189,6 +189,22 @@ class TestParserNiveles(unittest.TestCase):
         ast = compilar('LEVELS:\n  LEVEL BABY:\n  END\nEND\n')
         self.assertEqual(ast['levels'], [{'nombre': 'BABY'}])
 
+    def test_modificador_poison_kills(self):
+        # POISON_KILLS decide en cada nivel si comer veneno termina la partida
+        ast = compilar('LEVELS:\n  LEVEL NYAN_CAT:\n    POISON_KILLS TRUE\n  END\nEND\n')
+        self.assertIs(ast['levels'][0]['poison_kills'], True)
+        ast = compilar('LEVELS:\n  LEVEL NYAN_CAT:\n    POISON_KILLS FALSE\n  END\nEND\n')
+        self.assertIs(ast['levels'][0]['poison_kills'], False)
+
+    def test_brick_remake_pone_poison_kills_solo_en_nyan_cat(self):
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(raiz, 'games', 'snake_remake.brick')) as f:
+            ast = compilar(f.read())
+        niveles = dict((n['nombre'], n) for n in ast['levels'])
+        self.assertIs(niveles['NYAN_CAT']['poison_kills'], True)
+        self.assertNotIn('poison_kills', niveles['BABY'])
+        self.assertNotIn('poison_kills', niveles['ENTUSIASTA'])
+
     def test_el_bloque_va_en_cualquier_posicion(self):
         # El parser es un despachador de tokens: el bloque no depende del orden
         for fuente in ('LEVELS:\n  LEVEL BABY:\n  END\nEND\nGAME_TYPE SNAKE\n',

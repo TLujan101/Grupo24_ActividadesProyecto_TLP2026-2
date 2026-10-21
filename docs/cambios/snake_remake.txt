@@ -8,6 +8,7 @@ Se extendió la gramática y el archivo de definición del juego para soportar p
 Nuevos Modificadores de Nivel:
 
 POISON_ENABLED: Define si las frutas venenosas están habilitadas (TRUE / FALSE).
+POISON_KILLS: Define si comer fruta venenosa termina la partida en ese nivel (TRUE / FALSE). Por defecto FALSE: el veneno solo resta puntos.
 CLOUDS_COUNT: Define la cantidad exacta de nubes obstáculo que se generan al iniciar el nivel.
 INVULNERABILITY_DURATION: Controla los segundos que dura el power-up de invulnerabilidad.
 GEOMETRY: Permite asignar formas geométricas específicas al nivel (RECT, CIRCLE, TRIANGLE, NYAN_CAT).
@@ -16,7 +17,9 @@ Estructura de Niveles en snake_remake.brick:
 
 BABY: TICK 0.18, GEOMETRY RECT, POISON_ENABLED FALSE, CLOUDS_COUNT 0.
 ENTUSIASTA: TICK 0.12, GEOMETRY TRIANGLE, POISON_ENABLED TRUE, INVULNERABILITY_DURATION 10, CLOUDS_COUNT 0.
-NYAN_CAT: TICK 0.06, GEOMETRY NYAN_CAT, POISON_ENABLED TRUE, INVULNERABILITY_DURATION 15, CLOUDS_COUNT 3.
+NYAN_CAT: TICK 0.06, GEOMETRY NYAN_CAT, POISON_ENABLED TRUE, POISON_KILLS TRUE, INVULNERABILITY_DURATION 15, CLOUDS_COUNT 3.
+
+POISON_KILLS solo se declara en NYAN_CAT: en el nivel máximo la baya venenosa termina la partida; en el resto sigue siendo una penalización de puntos.
 
 
 2. Actualizaciones en el Compilador (compiler.py)
@@ -40,3 +43,17 @@ Renderizado y Geometrías:
 Corrección en la asignación de variables de render (taman_celda) para evitar conflictos en las formas circulares y triangulares.
 Implementación de la animación de cola arcoíris basada en un contador de fotogramas (frame_counter) para el nivel Nyan Cat.
 Ajuste del color predeterminado de la cabeza de la serpiente en niveles estándar a un tono verde oscuro diferenciado del cuerpo.
+La fruta normal se dibuja ahora con el mismo icono de baya (tallo, baya y hoja) que la venenosa, diferenciada solo por el color (roja para la normal, morada para la venenosa).
+El power-up también usa ese icono, en amarillo. Como las tres bayas comparten la misma forma, el método se renombró de dibujar_veneno_celda a dibujar_baya_celda: el nombre decía "veneno" y ya no servía.
+
+Invulnerabilidad (power-up "No Morir"):
+
+GRANT_INVULNERABILITY conserva su número como respaldo, pero si el nivel declara INVULNERABILITY_DURATION, el valor del nivel es el que se concede: NYAN_CAT otorga 15 segundos y ENTUSIASTA 10, en lugar del 10 fijo que decía el evento global ON EAT_POWERUP.
+La cuenta atrás se decrementa en segundos de juego (velocidad_gravedad, es decir TICK del nivel) y no en ticks: antes un valor de 10 duraba 10 ticks, que en NYAN_CAT eran 0.6 s en vez de 10 s.
+La cabeza parpadea en amarillo mientras dura el power-up. El parpadeo se acelera conforme se acaba el tiempo (de 6 frames, unos 300 ms, a 1 frame, 50 ms) para que el jugador note que le queda poco. El intervalo lo calcula intervalo_parpadeo() a partir de la duración concedida y la que queda.
+Con el power-up activo la baya morada queda neutralizada: no resta puntos, no termina la partida aunque el nivel declare POISON_KILLS TRUE y tampoco se consume (sigue ahí para cuando se acabe la invulnerabilidad).
+
+Veneno mortal por nivel (POISON_KILLS):
+
+El evento ON EAT_POISON es global y no puede decidir si la partida termina, así que esa decisión vive en el modificador por nivel POISON_KILLS. Al comer veneno se ejecuta el evento (resta de puntos, efecto y reaparición) y, solo si el nivel activo declara POISON_KILLS TRUE, se marca el fin de la partida, lo que dispara ON GAME_OVER.
+El compilador convierte TRUE/FALSE a booleano (tipo "booleano" en MODIFICADORES_NIVEL); sin esa conversión el motor recibiría el string "FALSE" y bool("FALSE") sería True.
