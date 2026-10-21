@@ -17,15 +17,16 @@ cmd /c "C:\Python27\python.exe -u -m unittest discover -s tests -t . -v"
 - Desde PowerShell el output se colinea hasta el final: si algo se cuelga, redirigir
   con `cmd /c ... > log 2>&1` y leer el log para ver en qué test va.
 
-## Estado de la suite (117 tests, ~1.4 s)
+## Estado de la suite (123 tests, ~1.9 s)
 
-4 fallos **preexistentes** en HEAD, de áreas ya distintas — no tocarlos sin pedir:
+2 fallos **preexistentes** en HEAD, de áreas ajenas a la actividad — no tocarlos sin pedir:
 
 - `test_music_exige_nombre` (mensaje de error de `MUSIC`)
-- `test_tema_nyan_es_la_melodia_fiel_de_una_voz` y
-  `test_tema_nyan_sintetiza_la_melodia_completa` (el fixture y `TEMA_NYAN` del
-  `.brick` no coinciden: 1712 vs 28080 ms)
 - `test_snake_remake_abre_menu_y_arranca_al_elegir` (el `.brick` declara `START: BABY`)
+
+`TEMA_NYAN` es una composición propia de 2 voces, **congelada con un md5 dorado**
+del PCM (`b5c00a9d…`): si ese test falla, la canción cambió de verdad. Para
+tocarla hay que rehacer el preview `.wav` y actualizar el md5 a propósito.
 
 ## Gotchas de código
 

@@ -53,6 +53,14 @@ La cuenta atrás se decrementa en segundos de juego (velocidad_gravedad, es deci
 La cabeza parpadea en amarillo mientras dura el power-up. El parpadeo se acelera conforme se acaba el tiempo (de 6 frames, unos 300 ms, a 1 frame, 50 ms) para que el jugador note que le queda poco. El intervalo lo calcula intervalo_parpadeo() a partir de la duración concedida y la que queda.
 Con el power-up activo la baya morada queda neutralizada: no resta puntos, no termina la partida aunque el nivel declare POISON_KILLS TRUE y tampoco se consume (sigue ahí para cuando se acabe la invulnerabilidad).
 
+Tema Nyan Cat (TEMA_NYAN):
+
+El tema dejo de ser la transcripcion del tema publicado y paso a ser un tema propio de dos voces (lead + arpegio), en onda cuadrada: 6 compases de 4/4 a 150 BPM (corchea de 200 ms), 48 slots por voz, 9.6 s de loop. Progresion C - Am - F - G - C - G7>C, con el lead en octavas 5-6 y el arpegio en la octava 3.
+En el .brick cada voz es un bloque VOICE con 48 NOTE; el sintetizador las mezcla muestra a muestra y normaliza el pico.
+El tema queda congelado con un md5 dorado del PCM (b5c00a9d824a221678215ea6ca64c173), calculado sobre el preview que se escucho antes de fijarlo. Los tests comprueban ademas que las dos voces duran lo mismo (9.600 ms) y que ninguna tiene un silencio mas largo que un slot.
+El compas 6 se queda en dominante (G7) y la resolucion cae en el empalme del loop: el lead baja de D5 a C5 y el bajo sube de B2 a C3 (la sensible), para que no suene el C5|C5 ni el C3 C3|C3 del repetidor.
+La transcripcion de referencia queda archivada en tests/fixtures/nyan_melodia.json como documento de trabajo: ya no la usa ningun test.
+
 Veneno mortal por nivel (POISON_KILLS):
 
 El evento ON EAT_POISON es global y no puede decidir si la partida termina, así que esa decisión vive en el modificador por nivel POISON_KILLS. Al comer veneno se ejecuta el evento (resta de puntos, efecto y reaparición) y, solo si el nivel activo declara POISON_KILLS TRUE, se marca el fin de la partida, lo que dispara ON GAME_OVER.

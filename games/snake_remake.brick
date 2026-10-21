@@ -57,24 +57,110 @@ DEFINE SONG TEMA_ENTUSIASTA:
   NOTE C4 600
 END
 
-# Tema Nyan Cat con onda cuadrada
+# Tema Nyan Cat: tema propio de dos voces (lead + arpegio) en onda cuadrada.
+# 6 compases de 4/4 a 150 BPM (corchea de 200 ms) = 9.6 s de loop.
+# Progresion: C - Am - F - G - C - G7>C. Termina resolviendo en Do.
 DEFINE SONG TEMA_NYAN WAVE SQUARE:
-  NOTE D#5 107
-  NOTE E5 107
-  NOTE F#5 107
-  NOTE REST 107
-  NOTE B5 107
-  NOTE E5 107
-  NOTE D#5 107
-  NOTE E5 107
-  NOTE F#5 107
-  NOTE B5 107
-  NOTE D6 107
-  NOTE E6 107
-  NOTE D#6 107
-  NOTE A#5 107
-  NOTE B5 107
-  NOTE REST 107
+  VOICE 1:
+    NOTE C5 200
+    NOTE E5 200
+    NOTE G5 200
+    NOTE C6 200
+    NOTE B5 200
+    NOTE G5 200
+    NOTE E5 200
+    NOTE C5 200
+    NOTE A4 200
+    NOTE C5 200
+    NOTE E5 200
+    NOTE A5 200
+    NOTE G5 200
+    NOTE E5 200
+    NOTE C5 200
+    NOTE REST 200
+    NOTE F4 200
+    NOTE A4 200
+    NOTE C5 200
+    NOTE F5 200
+    NOTE E5 200
+    NOTE C5 200
+    NOTE A4 200
+    NOTE F4 200
+    NOTE G4 200
+    NOTE B4 200
+    NOTE D5 200
+    NOTE G5 200
+    NOTE F#5 200
+    NOTE D5 200
+    NOTE B4 200
+    NOTE REST 200
+    NOTE C5 200
+    NOTE E5 200
+    NOTE G5 200
+    NOTE C6 200
+    NOTE E6 200
+    NOTE D6 200
+    NOTE C6 200
+    NOTE G5 200
+    NOTE B4 200
+    NOTE D5 200
+    NOTE F#5 200
+    NOTE B5 200
+    NOTE A5 200
+    NOTE G5 200
+    NOTE E5 200
+    NOTE D5 200
+  END
+  VOICE 2:
+    NOTE C3 200
+    NOTE E3 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE F2 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE A2 200
+    NOTE F2 200
+    NOTE A2 200
+    NOTE G2 200
+    NOTE B2 200
+    NOTE D3 200
+    NOTE B2 200
+    NOTE D3 200
+    NOTE B2 200
+    NOTE G2 200
+    NOTE B2 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE C4 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE G2 200
+    NOTE B2 200
+    NOTE D3 200
+    NOTE F3 200
+    NOTE E3 200
+    NOTE D3 200
+    NOTE C3 200
+    NOTE B2 200
+  END
 END
 
 # --- Efectos ---
