@@ -54,13 +54,23 @@ class Canvas(WidgetFalso):
     def __init__(self, master=None, **opciones):
         WidgetFalso.__init__(self, master, **opciones)
         self.rectangulos = []
+        self.ovales = []
+        self.poligonos = []
 
     def create_rectangle(self, x1, y1, x2, y2, **opciones):
         self.rectangulos.append(((x1, y1, x2, y2), opciones.get('fill')))
 
+    def create_oval(self, x1, y1, x2, y2, **opciones):
+        self.ovales.append(((x1, y1, x2, y2), opciones.get('fill')))
+
+    def create_polygon(self, puntos, **opciones):
+        self.poligonos.append((list(puntos), opciones.get('fill')))
+
     def delete(self, que):
         if que == "all":
             self.rectangulos = []
+            self.ovales = []
+            self.poligonos = []
 
 
 class Frame(WidgetFalso): pass

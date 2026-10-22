@@ -23,18 +23,30 @@ SILENCIO = 'REST'
 ONDA_SENOIDAL = 'SINE'
 ONDAS = ('SINE', 'SQUARE')
 
+# Scanner: una regex por clase de token. El orden emula maximal munch (Python
+# se queda con la primera que casa, no con la mas larga): NOTA antes que
+# PALABRA para no partir E5, y NUMERO con el decimal pegado para no partir
+# 0.15. El nombre solo documenta; los tokens siguen siendo strings.
+PATRONES_TOKEN = [
+    ('NOTA', r'\b[A-G]#?[0-9]+\b'),   # E5, D#4
+    ('PALABRA', r'\b[A-Z_]+\b'),      # GAME_TYPE, NYAN_CAT
+    ('NUMERO', r'\d+(?:\.\d+)?'),     # 10, 0.15
+    ('SIMBOLO', r'[\[\](),:]'),       # [ ] ( ) , :
+]
+
+# '#' tras A-G es sostenido (D#4); en cualquier otro caso abre comentario.
+PATRON_COMENTARIO = r'(?<![A-G])#.*'
+
+# (?:...) hace que findall devuelva el token completo, no sus grupos.
+RE_TOKEN = re.compile(
+    '|'.join('(?:' + patron + ')' for _, patron in PATRONES_TOKEN))
+RE_COMENTARIO = re.compile(PATRON_COMENTARIO)
+
+
 def lexer(codigo_fuente):
-    # Un '#' precedido por letra A-G no abre comentario: es el sostenido de una
-    # nota (D#4). Si lo abriera, se comia el resto de la linea y con ella la
-    # duracion de la nota.
-    codigo_fuente = re.sub(r'(?<![A-G])#.*', '', codigo_fuente)
-    # Un nombre de nota (E5, D#4) es un token propio: si no, el lexer
-    # partia "E5" en "E" y "5" y la nota se colaba como texto no reconocido.
-    # El grupo de decimales va pegado al de enteros: suelto, \d+ se comia el 0
-    # de 0.15 y el punto caia en resto como caracter no reconocido.
-    token_regex = r'\b[A-G]#?[0-9]+\b|\b[A-Z_]+\b|\d+(?:\.\d+)?|[\[\](),:]'
-    tokens = re.findall(token_regex, codigo_fuente)
-    resto = re.sub(token_regex, '', codigo_fuente)
+    codigo_fuente = RE_COMENTARIO.sub('', codigo_fuente)
+    tokens = RE_TOKEN.findall(codigo_fuente)
+    resto = RE_TOKEN.sub('', codigo_fuente)
     if resto.strip():
         raise Exception("Caracteres no reconocidos: '" + resto.strip()[:40] + "'")
     return tokens
@@ -148,38 +160,47 @@ class Parser:
         self.ast['config']['grid_size'] = [ancho, alto]
 
     def parsear_shape(self):
-        self.consumir('DEFINE')
-        self.consumir('SHAPE')
-        nombre_shape = self.consumir()
-        color_shape = "CYAN"
-        chance_shape = 10
-        if self.ver() == "COLOR":
-            self.consumir("COLOR")
-            color_shape = self.consumir()
-        if self.ver() == "CHANCE":
-            self.consumir("CHANCE")
-            chance_shape = self.consumir_numero()
-        self.consumir(':')
-        estados = []
-        while self.ver() == 'STATE':
-            self.consumir('STATE')
-            self.consumir()
-            self.consumir(':')
-            matriz = []
-            while self.ver() == '[':
-                fila = []
-                self.consumir('[')
-                while self.ver() != ']':
-                    if self.ver() is None:
-                        raise Exception("Error de sintaxis: fila sin ']' antes del fin del archivo.")
-                    fila.append(self.consumir_numero())
-                    if self.ver() == ',': self.consumir(',')
-                self.consumir(']')
-                matriz.append(fila)
-            estados.append(matriz)
-        self.consumir('END')
-        self.ast['shapes'][nombre_shape] = {"estados": estados, "color": color_shape, "chance": chance_shape}
+            self.consumir('DEFINE')
+            self.consumir('SHAPE')
+            nombre_shape = self.consumir()
+            geometry_shape = "RECT"
+            color_shape = "CYAN"
+            chance_shape = 10
+            
+            while self.ver() in ("GEOMETRY", "COLOR", "CHANCE"):
+                token = self.consumir()
+                if token == "GEOMETRY":
+                    geometry_shape = self.consumir()
+                elif token == "COLOR":
+                    color_shape = self.consumir()
+                elif token == "CHANCE":
+                    chance_shape = self.consumir_numero()
 
+            self.consumir(':')
+            estados = []
+            while self.ver() == 'STATE':
+                self.consumir('STATE')
+                self.consumir()
+                self.consumir(':')
+                matriz = []
+                while self.ver() == '[':
+                    fila = []
+                    self.consumir('[')
+                    while self.ver() != ']':
+                        if self.ver() is None:
+                            raise Exception("Error de sintaxis: fila sin ']' antes del fin del archivo.")
+                        fila.append(self.consumir_numero())
+                        if self.ver() == ',': self.consumir(',')
+                    self.consumir(']')
+                    matriz.append(fila)
+                estados.append(matriz)
+            self.consumir('END')
+            self.ast['shapes'][nombre_shape] = {
+                "estados": estados, 
+                "geometry": geometry_shape,
+                "color": color_shape, 
+                "chance": chance_shape
+            }
     # NIVELES
     # --------
     #
@@ -187,7 +208,7 @@ class Parser:
     # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
     # que la tecla 2 elegiria un nivel arbitrario.
 
-    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre')}
+    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero')}
 
     def parsear_niveles(self):
         # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END
@@ -250,11 +271,19 @@ class Parser:
             # guarda el tipo. Sin esto, float('TEMA_CALMO') reventaria.
             if tipo == 'real':
                 nivel[clave] = self.consumir_decimal()
+            elif tipo == 'numero':
+                nivel[clave] = self.consumir_numero()
             else:
                 if self.ver() is None or self.ver() == 'END':
-                    raise Exception("Error de sintaxis: se esperaba el nombre de la "
-                                    "cancion del nivel '" + nombre + "'")
-                nivel[clave] = self.consumir()
+                    raise Exception("Error de sintaxis: se esperaba un valor para '" + 
+                                    str(clave) + "' en el nivel '" + nombre + "'")
+                valor_leido = self.consumir()
+                
+                # Conversión opcional limpia para el booleano del veneno
+                if clave == 'poison_enabled':
+                    nivel[clave] = str(valor_leido).upper() == 'TRUE'
+                else:
+                    nivel[clave] = valor_leido
         self.consumir('END')
         if 'tick' in nivel and not (0 < nivel['tick'] < INFINITO):
             # La comparacion sola no alcanza: en py2 nan <= 0 es False y
@@ -366,7 +395,53 @@ class Parser:
                 notas.append([self.nota_a_hz(token_nota), ms])
         return notas
 
-
+    def parsear_nivel(self, vistos):
+        self.consumir('LEVEL')
+        nombre = self.consumir()
+        self.consumir(':')
+        if nombre in vistos:
+            raise Exception("Error de sintaxis: el nivel '" + nombre +
+                            "' esta definido dos veces")
+        nivel = {'nombre': nombre}
+        while self.ver() not in (':', 'END', None):
+            entrada = self.MODIFICADORES_NIVEL.get(self.ver())
+            if entrada is None:
+                # Un modificador desconocido se reporta, nunca se ignora: si se
+                # pasara, el nivel arrancaria con el default sin avisar.
+                raise Exception("Error de sintaxis: modificador desconocido '" +
+                                str(self.ver()) + "' en el nivel '" + nombre + "'")
+            self.consumir()
+            clave, tipo = entrada
+            # TICK toma un real y MUSIC un identificador: por eso la tabla
+            # guarda el tipo. Sin esto, float('TEMA_CALMO') reventaria.
+            if tipo == 'real':
+                nivel[clave] = self.consumir_decimal()
+            elif tipo == 'numero':
+                nivel[clave] = self.consumir_numero()
+            elif tipo == 'booleano':
+                if self.ver() is None or self.ver() == 'END':
+                    raise Exception("Error de sintaxis: se esperaba el valor o nombre del "
+                                    "modificador del nivel '" + nombre + "'")
+                # TRUE/FALSE llegan como PALABRA. Sin convertirlo el motor
+                # recibe el string 'FALSE' y bool('FALSE') es True: el veneno
+                # se activaria en el nivel que lo apaga.
+                nivel[clave] = str(self.consumir()).upper() == 'TRUE'
+            else:
+                if self.ver() is None or self.ver() == 'END':
+                    raise Exception("Error de sintaxis: se esperaba el valor o nombre del "
+                                    "modificador del nivel '" + nombre + "'")
+                nivel[clave] = self.consumir()
+        self.consumir('END')
+        if 'tick' in nivel and not (0 < nivel['tick'] < INFINITO):
+            # La comparacion sola no alcanza: en py2 nan <= 0 es False y
+            # inf <= 0 tambien, asi que ambos se colaban. Con un TICK nan el
+            # motor se come el valor (0.05 >= nan es False para siempre) y la
+            # partida queda congelada sin error de compilacion. Ademas json.dump
+            # escribe NaN/Infinity crudos, que no son JSON valido.
+            raise Exception("Error de sintaxis: TICK del nivel '" + nombre +
+                            "' debe ser mayor que 0")
+        return nivel
+    
     def parsear_evento(self):
         self.consumir('ON')
         nombre_evento = 'ON_' + self.consumir()
@@ -375,12 +450,12 @@ class Parser:
         while self.ver() not in ('END', None):
             verbo = self.consumir()
 
-            # Si el comando es de una sola palabra, lo anadimos y continuamos
-            if verbo in ('GAME_OVER', 'STOP_MUSIC'):
+            # Si el comando es de una sola palabra, lo añadimos y continuamos
+            if verbo in ('GAME_OVER', 'STOP_MUSIC', 'RESET_SCORE'):
                 acciones.append({'accion': verbo, 'objeto': None, 'params': []})
                 continue
 
-            # Si no, parseamos el resto de la accion
+            # Si no, parseamos el resto de la acción
             objeto = self.consumir()
             params = []
             if self.ver() == 'AT':
@@ -394,17 +469,27 @@ class Parser:
                     y = self.consumir_numero()
                     self.consumir(')')
                     params.append([x, y])
-            elif self.ver() not in ['END', 'ON', 'DEFINE', 'SPAWN', 'MOVE', 'ROTATE', 'INCREASE_SCORE', 'SET_DIRECTION', 'GROW', 'GAME_OVER', 'PLAY_MUSIC', 'STOP_MUSIC', 'PLAY_EFFECT', None]:
+            elif self.ver() not in ['END', 'ON', 'DEFINE', 'SPAWN', 'MOVE', 'ROTATE', 'INCREASE_SCORE', 'DECREASE_SCORE', 'GRANT_INVULNERABILITY', 'SET_DIRECTION', 'GROW', 'GAME_OVER', 'PLAY_MUSIC', 'STOP_MUSIC', 'PLAY_EFFECT', 'RESET_SCORE', None]:
                 params.append(self.consumir())
-            if verbo == 'INCREASE_SCORE':
+            
+            # Validar acciones que requieren un número como parámetro principal
+            if verbo in ('INCREASE_SCORE', 'DECREASE_SCORE', 'GRANT_INVULNERABILITY'):
                 try:
                     int(objeto)
                 except (ValueError, TypeError):
-                    raise Exception("Error de sintaxis: INCREASE_SCORE necesita un numero, se encontro '" + str(objeto) + "'")
+                    raise Exception("Error de sintaxis: La accion '" + verbo + "' necesita un numero, se encontro '" + str(objeto) + "'")
+            elif verbo == 'GROW':
+                if not params:
+                    raise Exception("Error de sintaxis: GROW necesita un numero.")
+                try:
+                    int(params[0])
+                except (ValueError, TypeError):
+                    raise Exception("Error de sintaxis: La accion 'GROW' necesita un numero, se encontro '" + str(params[0]) + "'")
+            
             acciones.append({'accion': verbo, 'objeto': objeto, 'params': params})
         self.consumir('END')
         self.ast['events'][nombre_evento] = acciones
-
+        
 def generar_codigo(ast, archivo_salida):
     with open(archivo_salida, 'w') as f:
         json.dump(ast, f, indent=2)

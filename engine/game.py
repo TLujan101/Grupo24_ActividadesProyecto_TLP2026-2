@@ -13,7 +13,8 @@
 #   - color_celda_grid(x, y): (opcional) color de una celda fija.
 
 import sys
-import Tkinter as tk
+import Tkinter as tk #type:  ignore
+import random
 
 from . import tracker
 from .audio import GestorAudioNativo
@@ -148,6 +149,57 @@ class Game(object):
         # Con un solo nivel no hay nada que elegir: el .brick no declaro
         # LEVELS y el juego arranca directo, como antes.
         return len(self.niveles) > 1
+    
+    #Figuras
+    def dibujar_circulo_celda(self, x, y, color):
+        x1 = x * self.taman_celda
+        y1 = y * self.taman_celda
+        x2 = x1 + self.taman_celda
+        y2 = y1 + self.taman_celda
+        self.canvas.create_oval(x1, y1, x2, y2, fill=color, outline="")
+
+    def dibujar_triangulo_celda(self, x, y, color):
+        x1 = x * self.taman_celda
+        y1 = y * self.taman_celda
+        x2 = x1 + self.taman_celda
+        y2 = y1 + self.taman_celda
+        puntos = [x1 + self.taman_celda / 2.0, y1, x1, y2, x2, y2]
+        self.canvas.create_polygon(puntos, fill=color, outline="")
+        
+    def ejecutar_evento(self, nombre_evento):
+        # Verifica si el evento existe en el diccionario de eventos del juego
+        events = getattr(self, 'datos_juego', {}).get('events', {})
+        if nombre_evento in events:
+            for accion in events[nombre_evento]:
+                verbo = accion.get('accion')
+                objeto = accion.get('objeto')
+                
+                if verbo == 'INCREASE_SCORE':
+                    try:
+                        self.puntuacion += int(objeto)
+                    except (ValueError, TypeError):
+                        pass
+                elif verbo == 'DECREASE_SCORE':
+                    try:
+                        self.puntuacion = max(0, self.puntuacion - int(objeto))
+                    except (ValueError, TypeError):
+                        pass
+                elif verbo == 'RESET_SCORE':
+                    self.puntuacion = 0
+                elif verbo == 'GAME_OVER':
+                    self.juego_terminado = True
+
+                # Audio
+                if verbo == 'PLAY_MUSIC': 
+                    self.musica_brick(objeto)
+                elif verbo == 'PLAY_EFFECT': 
+                    self.efecto_brick(objeto)
+                elif verbo == 'STOP_MUSIC': 
+                    if hasattr(self, 'audio'):
+                        self.audio.detener_musica()
+
+                # Ejecutar acciones específicas del juego (Snake)
+                self.ejecutar_accion(verbo, objeto, accion)
 
     def aplicar_nivel(self):
         # Cada juego dejo su default en inicializar_estado(); el nivel lo pisa
@@ -339,25 +391,72 @@ class Game(object):
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
 
-    def ejecutar_evento(self, nombre_evento):
-        if nombre_evento in self.datos_juego['events']:
-            for accion in self.datos_juego['events'][nombre_evento]:
-                verbo, objeto = accion.get('accion'), accion.get('objeto')
+    def snake_mover_jugador(self):
+        if not self.serpiente_cuerpo: return
+        
+        # Reducir temporizador de invulnerabilidad si está activo
+        if self.tiempo_invulnerable > 0:
+            self.tiempo_invulnerable -= 1
 
-                if verbo == 'INCREASE_SCORE':
-                    try:
-                        self.puntuacion += int(objeto)
-                    except (ValueError, TypeError):
-                        pass
-                if verbo == 'GAME_OVER': self.juego_terminado = True
+        if self.direccion_pendiente is not None:
+            self.serpiente_direccion = self.direccion_pendiente
+            self.direccion_pendiente = None
+            
+        cabeza_x, cabeza_y = self.serpiente_cuerpo[0]
+        dir_x, dir_y = self.serpiente_direccion
+        nueva_cabeza = (cabeza_x + dir_x, cabeza_y + dir_y)
 
-                # Audio declarado en el .brick
-                if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
-                if verbo == 'PLAY_EFFECT': self.efecto_brick(objeto)
-                if verbo == 'STOP_MUSIC': self.audio.detener_musica()
+        es_invulnerable = self.tiempo_invulnerable > 0
 
-                # Acciones propias de cada juego
-                self.ejecutar_accion(verbo, objeto, accion)
+        # 1. Validar colisión con paredes
+        if not (0 <= nueva_cabeza[0] < self.ancho and 0 <= nueva_cabeza[1] < self.alto):
+            if not es_invulnerable:
+                self.ejecutar_evento('ON_COLLISION_WALL')
+            return
+
+        # 2. Validar colisión con nubes
+        if hasattr(self, 'nubes') and nueva_cabeza in self.nubes:
+            if not es_invulnerable:
+                self.ejecutar_evento('ON_COLLISION_CLOUD')
+            return
+
+        # 3. Validar auto-colisión (cuerpo sólido)
+        # Si hay crecimiento pendiente, la cola actual no se borra, por lo que todo el cuerpo es sólido.
+        cuerpo_solido = self.serpiente_cuerpo if self.crecimiento_pendiente > 0 else self.serpiente_cuerpo[:-1]
+        if nueva_cabeza in cuerpo_solido:
+            if not es_invulnerable:
+                self.ejecutar_evento('ON_COLLISION_SELF')
+            return
+
+        # 4. Insertar la nueva cabeza
+        self.serpiente_cuerpo.insert(0, nueva_cabeza)
+
+        # 5. Comprobar si comió algo en esta posición
+        if nueva_cabeza == self.posicion_comida:
+            self.ejecutar_evento('ON_EAT_FOOD')
+        elif hasattr(self, 'posicion_veneno') and nueva_cabeza == self.posicion_veneno:
+            self.ejecutar_evento('ON_EAT_POISON')
+        elif hasattr(self, 'posicion_powerup') and nueva_cabeza == self.posicion_powerup:
+            self.ejecutar_evento('ON_EAT_POWERUP')
+
+        # 6. Manejar el crecimiento o mover la cola
+        if self.crecimiento_pendiente > 0:
+            self.crecimiento_pendiente -= 1
+        else:
+            self.serpiente_cuerpo.pop()
+
+    def snake_spawn_comida(self):
+        if len(self.serpiente_cuerpo) >= self.ancho * self.alto:
+            self.juego_terminado = True
+            return
+        while True:
+            x, y = random.randint(0, self.ancho - 1), random.randint(0, self.alto - 1)
+            pos = (x, y)
+            # Asegurar que la comida no aparezca sobre la serpiente ni sobre nubes
+            nubes_activas = getattr(self, 'nubes', [])
+            if pos not in self.serpiente_cuerpo and pos not in nubes_activas:
+                self.posicion_comida = pos
+                break
 
 
     # DIBUJO
