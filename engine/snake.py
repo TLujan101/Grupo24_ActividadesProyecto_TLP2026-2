@@ -3,7 +3,12 @@
 
 import random
 from .game import Game
-from .utilidades import Colores, Arcoiris
+from .utilidades import Colores
+
+# Cola de Nyan Cat: degradado fijo (rojo, naranja, verde, azul, morado) que
+# cicla cada 5 segmentos. Depende de la posicion y no del frame: animarlo
+# hacia que la cola "corriera" y distraia del juego.
+COLORES_NYAN = ["#FF0000", "#FF7F00", "#00FF00", "#0000FF", "#AA00FF"]
 
 class Snake(Game):
 
@@ -76,6 +81,14 @@ class Snake(Game):
             pos = self._obtener_posicion_libre()
             if pos:
                 self.nubes.append(pos)
+
+    def snake_spawn_comida(self):
+        """Comida con la misma lista de ocupadas que el resto de elementos."""
+        pos = self._obtener_posicion_libre()
+        if pos is None:
+            self.juego_terminado = True   # tablero lleno
+            return
+        self.posicion_comida = pos
 
     def snake_spawn_veneno(self):
         pos = self._obtener_posicion_libre()
@@ -203,20 +216,47 @@ class Snake(Game):
             return False
         return (self.frame_counter // self.intervalo_parpadeo()) % 2 == 0
 
-    def dibujar_triangulo_celda(self, x, y, color):
-        """Dibuja un triángulo exacto usando el canvas y la variable correcta del motor"""
+    def _direccion_del_segmento(self, indice):
+        """Direccion con la que llego cada segmento (orienta el triangulo).
+
+        La cabeza usa la direccion actual; el resto, el vector desde el
+        segmento siguiente. La cola hereda la direccion del penultimo.
+        """
+        cuerpo = self.serpiente_cuerpo
+        if indice == 0:
+            return self.serpiente_direccion
+        if indice + 1 < len(cuerpo):
+            actual, siguiente = cuerpo[indice], cuerpo[indice + 1]
+            return (actual[0] - siguiente[0], actual[1] - siguiente[1])
+        return self._direccion_del_segmento(indice - 1)
+
+    def dibujar_triangulo_celda(self, x, y, color, direccion=(0, -1)):
+        """Dibuja un triángulo que apunta hacia donde se movió la serpiente."""
         if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
-            x1 = x * self.taman_celda
-            y1 = y * self.taman_celda
-            x2 = x1 + self.taman_celda
-            y2 = y1 + self.taman_celda
-            puntos = [x1 + self.taman_celda / 2.0, y1 + 2, x1 + 2, y2 - 2, x2 - 2, y2 - 2]
+            c = self.taman_celda
+            x1 = x * c
+            y1 = y * c
+            x2 = x1 + c
+            y2 = y1 + c
+            m = 2
+            cx = x1 + c / 2.0
+            cy = y1 + c / 2.0
+            dx, dy = direccion
+            if dx > 0:      # derecha
+                puntos = [x2 - m, cy, x1 + m, y1 + m, x1 + m, y2 - m]
+            elif dx < 0:    # izquierda
+                puntos = [x1 + m, cy, x2 - m, y1 + m, x2 - m, y2 - m]
+            elif dy < 0:    # arriba (default)
+                puntos = [cx, y1 + m, x1 + m, y2 - m, x2 - m, y2 - m]
+            else:           # abajo
+                puntos = [cx, y2 - m, x1 + m, y1 + m, x2 - m, y1 + m]
             self.canvas.create_polygon(puntos, fill=color, outline="")
         else:
             self.dibujar_celda(x, y, color)
 
     def dibujar_elementos(self):
-        # Incrementar el contador de frames para animar el arcoíris en cada ciclo de renderizado
+        # Incrementar el contador de frames para el parpadeo de la cabeza
+        # invulnerable (la cola ya no se anima).
         self.frame_counter = getattr(self, 'frame_counter', 0) + 1
 
         # 1. Dibujar Nubes Obstáculo
@@ -243,9 +283,8 @@ class Snake(Game):
                 if i == 0:
                     color = Colores.get("GRAY", "#7D7D7D")  # Gris para la cabeza
                 else:
-                    # Rotar los colores del arcoíris dinámicamente con el frame counter
-                    indice_arcoiris = (i - 1 + self.frame_counter) % len(Arcoiris)
-                    color = Arcoiris[indice_arcoiris]
+                    # Degradado fijo por posicion: la cola no se anima.
+                    color = COLORES_NYAN[(i - 1) % len(COLORES_NYAN)]
             else:
                 color = Colores.get("DARK GREEN", "#2EB72E") if i == 0 else Colores.get("GREEN", '#33CC33')
 
@@ -259,8 +298,10 @@ class Snake(Game):
                 # Tanto la cabeza como la cola de Nyan Cat y el modo círculo usan óvalos
                 self.dibujar_circulo_celda(x, y, color)
             elif geo == "TRIANGLE":
-                # El nivel Entusiasta usa triángulos en todos sus segmentos
-                self.dibujar_triangulo_celda(x, y, color)
+                # El nivel Entusiasta usa triángulos orientados hacia donde
+                # llegó cada segmento.
+                self.dibujar_triangulo_celda(x, y, color,
+                                             self._direccion_del_segmento(i))
             elif geo == "NUBE":
                 self.dibujar_nube_celda(x, y, color)
             else:
@@ -319,14 +360,31 @@ class Snake(Game):
         if getattr(self, 'duracion_inv_config', 0) > 0:
             self.snake_spawn_powerup()
 
+    def _casillas_ocupadas(self):
+        """Cuerpo, nubes y los tres consumibles: nada puede aparecer aqui."""
+        ocupadas = set(self.serpiente_cuerpo)
+        ocupadas.update(getattr(self, 'nubes', []))
+        for nombre in ('posicion_comida', 'posicion_veneno', 'posicion_powerup'):
+            pos = getattr(self, nombre, None)
+            if pos is not None:
+                ocupadas.add(pos)
+        return ocupadas
+
     def _obtener_posicion_libre(self):
-        if len(self.serpiente_cuerpo) >= self.ancho * self.alto:
+        ocupadas = self._casillas_ocupadas()
+        libres = [(x, y) for y in range(self.alto) for x in range(self.ancho)
+                  if (x, y) not in ocupadas]
+        if not libres:
             return None
-        while True:
-            x, y = random.randint(0, self.ancho - 1), random.randint(0, self.alto - 1)
-            pos = (x, y)
-            if pos not in self.serpiente_cuerpo and pos not in self.nubes and pos != self.posicion_comida:
+
+        # Se conserva el muestreo por coordenadas de siempre, pero acotado: si
+        # el azar insiste en una casilla ocupada (p. ej. un random fijo o un
+        # tablero casi lleno), cae a la lista de libres en vez de colgarse.
+        for _ in range(len(libres)):
+            pos = (random.randint(0, self.ancho - 1), random.randint(0, self.alto - 1))
+            if pos in libres:
                 return pos
+        return libres[0]
 
     def conceder_invulnerabilidad(self, segundos):
         try:
@@ -358,6 +416,39 @@ class Snake(Game):
 
 
 
+    # Orden fijo de reintento tras un choque: derecha, abajo, izquierda,
+    # arriba. Determinista a proposito: el jugador puede anticiparlo.
+    DIRECCIONES_REDIRECCION = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+
+    def _dentro_del_tablero(self, celda):
+        return 0 <= celda[0] < self.ancho and 0 <= celda[1] < self.alto
+
+    def _redirigir_tras_choque(self):
+        """Primera direccion libre en orden fijo; None si no hay ninguna.
+
+        Deja puesta la direccion nueva y devuelve la celda hacia la que avanza.
+        """
+        cabeza = self.serpiente_cuerpo[0]
+        nubes = getattr(self, 'nubes', [])
+        # Una media vuelta nunca vale: la celda de la cola se libera en el
+        # mismo tick y parecia libre, pero reversar atraviesa el propio cuerpo.
+        inversa = (-self.serpiente_direccion[0], -self.serpiente_direccion[1])
+        for dx, dy in self.DIRECCIONES_REDIRECCION:
+            if (dx, dy) == inversa:
+                continue
+            destino = (cabeza[0] + dx, cabeza[1] + dy)
+            if not self._dentro_del_tablero(destino) or destino in nubes:
+                continue
+            comiendo = (destino == self.posicion_comida)
+            cuerpo_solido = (self.serpiente_cuerpo
+                             if (self.crecimiento_pendiente > 0 or comiendo)
+                             else self.serpiente_cuerpo[:-1])
+            if destino in cuerpo_solido:
+                continue
+            self.serpiente_direccion = (dx, dy)
+            return destino
+        return None
+
     def snake_mover_jugador(self):
         if not self.serpiente_cuerpo: return
 
@@ -377,39 +468,32 @@ class Snake(Game):
 
         es_invulnerable = self.tiempo_invulnerable > 0
 
-        # 1. Validar colisión con paredes
-        if not (0 <= nueva_cabeza[0] < self.ancho and 0 <= nueva_cabeza[1] < self.alto):
+        # 1. Pared: sin power-up mata; con power-up envuelve al lado opuesto.
+        if not self._dentro_del_tablero(nueva_cabeza):
             if not es_invulnerable:
                 self.ejecutar_evento('ON_COLLISION_WALL')
-            return
+                return
+            nueva_cabeza = (nueva_cabeza[0] % self.ancho,
+                            nueva_cabeza[1] % self.alto)
 
-        # 2. Validar colisión con nubes
-        if hasattr(self, 'nubes') and nueva_cabeza in self.nubes:
+        # 2. Nube: con power-up se atraviesa; sin el, desvia o mata.
+        elif hasattr(self, 'nubes') and nueva_cabeza in self.nubes:
             if not es_invulnerable:
-                # Obtener el puntaje actual (compatible con self.score o self.puntuacion)
-                puntos_actuales = getattr(self, 'score', getattr(self, 'puntuacion', 0))
+                nueva_cabeza = self._redirigir_tras_choque()
+                if nueva_cabeza is None:
+                    # OJO: el evento se llama ON_GAME_OVER; ejecutar_evento('GAME_OVER')
+                    # no hacia nada. La bandera dispara ON_GAME_OVER en el game loop.
+                    self.juego_terminado = True
+                    return
 
-                if puntos_actuales > 0:
-                    # Si tiene puntos, pierde todos los puntos pero sigue vivo
-                    if hasattr(self, 'score'):
-                        self.score = 0
-                    if hasattr(self, 'puntuacion'):
-                        self.puntuacion = 0
-                    self.ejecutar_evento('ON_COLLISION_CLOUD')
-                    # Opcional: permitir que avance o sacarla de la nube para que no se congele
-                else:
-                    # Si no tiene puntos, es Game Over
-                    self.ejecutar_evento('GAME_OVER')
-            return
+        # 3. Auto-colisión: sin power-up mata; con power-up la atraviesa.
+        else:
+            comiendo = (nueva_cabeza == self.posicion_comida)
+            cuerpo_solido = self.serpiente_cuerpo if (self.crecimiento_pendiente > 0 or comiendo) else self.serpiente_cuerpo[:-1]
 
-        # 3. Validar auto-colisión
-        comiendo = (nueva_cabeza == self.posicion_comida)
-        cuerpo_solido = self.serpiente_cuerpo if (self.crecimiento_pendiente > 0 or comiendo) else self.serpiente_cuerpo[:-1]
-
-        if nueva_cabeza in cuerpo_solido:
-            if not es_invulnerable:
+            if nueva_cabeza in cuerpo_solido and not es_invulnerable:
                 self.ejecutar_evento('ON_COLLISION_SELF')
-            return
+                return
 
         # 4. Insertar la nueva cabeza
         self.serpiente_cuerpo.insert(0, nueva_cabeza)

@@ -92,6 +92,20 @@ class TestJuegosReales(unittest.TestCase):
             juego.manejar_tecla(random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT']))
             juego.game_loop()
 
+    def test_powerup_solo_da_invulnerabilidad(self):
+        # El power-up no da puntos ni alarga: solo invulnerabilidad.
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
+        verbos = [a['accion'] for a in datos_juego['events']['ON_EAT_POWERUP']]
+        self.assertIn('GRANT_INVULNERABILITY', verbos)
+        self.assertNotIn('GROW', verbos)
+        self.assertNotIn('INCREASE_SCORE', verbos)
+        # Nyan Cat es la dificultad maxima: su power-up dura menos.
+        duraciones = dict((n['nombre'], n.get('invulnerability_duration'))
+                          for n in datos_juego['levels'])
+        self.assertEqual(duraciones['ENTUSIASTA'], 7)
+        self.assertEqual(duraciones['NYAN_CAT'], 5)
+        self.assertLess(duraciones['NYAN_CAT'], duraciones['ENTUSIASTA'])
+
     def test_snake_remake_tiene_musica_por_nivel_y_efectos(self):
         from engine import tracker
         random.seed(1234)

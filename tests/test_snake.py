@@ -97,6 +97,194 @@ class TestSnake(TestSnakeBase):
         self.assertTrue(juego.juego_terminado, 'choque con la pared')
         self.assertEqual(juego.serpiente_cuerpo, [(4, 2)])
 
+    def test_el_desvio_tras_una_nube_tampoco_reversa(self):
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 2), (3, 2)]
+        juego.serpiente_direccion = (-1, 0)
+        juego.nubes = [(1, 2)]
+        juego.posicion_comida = (4, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_direccion, (0, 1))
+        self.assertEqual(juego.serpiente_cuerpo[0], (2, 3))
+
+    def test_posicion_libre_evita_veneno_y_powerup(self):
+        # Antes solo se evitaban cuerpo, nubes y comida: el veneno y el
+        # power-up podian aparecer encima de otros elementos.
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.nubes = [(1, 1)]
+        juego.posicion_comida = (3, 3)
+        juego.posicion_veneno = (0, 4)
+        juego.posicion_powerup = (4, 0)
+        # El azar insiste en la casilla del veneno.
+        valores = [0, 4] * 40
+        random.randint = lambda a, b: valores.pop(0) if valores else (0, 4)
+        pos = juego._obtener_posicion_libre()
+        self.assertIsNotNone(pos)
+        self.assertNotIn(pos, [(2, 2), (1, 1), (3, 3), (0, 4), (4, 0)])
+
+    def test_posicion_libre_no_se_cuelga_si_el_azar_repite_una_ocupada(self):
+        # Regresion: con random devolviendo siempre la casilla de la comida,
+        # _obtener_posicion_libre entraba en un bucle infinito.
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(1, 1)]
+        juego.nubes = [(2, 2)]
+        juego.posicion_comida = (0, 0)
+        random.randint = lambda a, b: 0
+        pos = juego._obtener_posicion_libre()
+        self.assertIsNotNone(pos)
+        self.assertNotIn(pos, [(1, 1), (2, 2), (0, 0)])
+
+    def test_la_comida_no_aparece_sobre_veneno_ni_powerup(self):
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.nubes = [(1, 1)]
+        juego.posicion_comida = None
+        juego.posicion_veneno = (3, 2)
+        juego.posicion_powerup = (4, 2)
+        valores = [3, 2] * 40          # el azar insiste en el veneno
+        random.randint = lambda a, b: valores.pop(0) if valores else (3, 2)
+        juego.snake_spawn_comida()
+        self.assertIsNotNone(juego.posicion_comida)
+        self.assertNotIn(juego.posicion_comida, [(2, 2), (1, 1), (3, 2), (4, 2)])
+
+    def test_la_comida_no_se_cuelga_si_el_azar_repite_una_ocupada(self):
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(0, 0), (1, 0)]
+        juego.nubes = [(2, 2)]
+        juego.posicion_comida = None
+        random.randint = lambda a, b: 0   # siempre (0, 0), ocupada por el cuerpo
+        juego.snake_spawn_comida()
+        self.assertIsNotNone(juego.posicion_comida)
+        self.assertNotEqual(juego.posicion_comida, (0, 0))
+
+    def test_nube_redirige_y_no_resetea_puntos(self):
+        # Chocar con una nube ya no castiga: la serpiente se desvia a la
+        # primera direccion libre (derecha, abajo, izquierda, arriba) y avanza.
+        juego = Snake(datos_snake())
+        juego.puntuacion = 20
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.nubes = [(3, 2)]
+        juego.posicion_comida = (4, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.puntuacion, 20, 'la nube ya no borra los puntos')
+        self.assertEqual(juego.serpiente_direccion, (0, 1))
+        self.assertEqual(juego.serpiente_cuerpo[0], (2, 3),
+                         'redirige y avanza en el mismo tick')
+
+    def test_nube_acorralada_mata(self):
+        # Sin ninguna direccion libre alrededor, la nube mata.
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(0, 0)]
+        juego.serpiente_direccion = (1, 0)
+        juego.nubes = [(1, 0), (0, 1)]
+        juego.posicion_comida = (4, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertTrue(juego.juego_terminado)
+
+    def test_invulnerable_envuelve_por_la_pared(self):
+        # Con el power-up, salir por la derecha reaparece por la izquierda.
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(4, 2), (3, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.tiempo_invulnerable = 5
+        juego.posicion_comida = (0, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_direccion, (1, 0))
+        self.assertEqual(juego.serpiente_cuerpo, [(0, 2), (4, 2)])
+
+    def test_invulnerable_envuelve_por_la_pared_vertical(self):
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 0), (2, 1)]
+        juego.serpiente_direccion = (0, -1)
+        juego.tiempo_invulnerable = 5
+        juego.posicion_comida = (4, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_cuerpo, [(2, 4), (2, 0)])
+
+    def test_invulnerable_atraviesa_las_nubes(self):
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.nubes = [(3, 2)]
+        juego.tiempo_invulnerable = 5
+        juego.posicion_comida = (4, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_direccion, (1, 0),
+                         'no debe desviarse')
+        self.assertEqual(juego.serpiente_cuerpo[0], (3, 2))
+        self.assertIn((3, 2), juego.nubes, 'la nube sigue ahi')
+
+    def test_invulnerable_atraviesa_el_cuerpo(self):
+        # Con el power-up la serpiente se puede pasar por encima de su propio
+        # cuerpo: no redirige y no muere.
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 2), (2, 3), (1, 3), (1, 2), (1, 1)]
+        juego.serpiente_direccion = (-1, 0)
+        juego.tiempo_invulnerable = 5
+        juego.posicion_comida = (0, 0)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_direccion, (-1, 0),
+                         'no debe desviarse')
+        self.assertEqual(juego.serpiente_cuerpo,
+                         [(1, 2), (2, 2), (2, 3), (1, 3), (1, 2)])
+
+    def test_tras_el_powerup_el_cuerpo_vuelve_a_ser_solido(self):
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(2, 2), (2, 3), (1, 3), (1, 2), (1, 1)]
+        juego.serpiente_direccion = (-1, 0)
+        juego.tiempo_invulnerable = 0
+        juego.posicion_comida = (0, 0)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertTrue(juego.juego_terminado)
+
+    def test_invulnerable_acorralada_no_muere(self):
+        # Con el power-up el borde envuelve: ya no se puede morir acorralada.
+        juego = Snake(datos_snake())
+        juego.serpiente_cuerpo = [(0, 0), (1, 0), (0, 1)]
+        juego.crecimiento_pendiente = 1      # la cola aun no se libera
+        juego.serpiente_direccion = (-1, 0)
+        juego.tiempo_invulnerable = 5
+        juego.posicion_comida = (4, 4)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.serpiente_cuerpo[0], (4, 0))
+
+    def test_triangulos_apuntan_a_la_derecha_en_linea_recta(self):
+        # En el nivel Entusiasta cada triangulo apunta hacia donde llego:
+        # en una recta hacia la derecha, el vertice queda en el borde derecho.
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'TRIANGLE'})
+        juego.posicion_comida = None
+        juego.serpiente_cuerpo = [(2, 2), (1, 2), (0, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.dibujar()
+        self.assertEqual([p for p, _ in juego.canvas.poligonos],
+                         [[73, 62.5, 52, 52, 52, 73],
+                          [48, 62.5, 27, 52, 27, 73],
+                          [23, 62.5, 2, 52, 2, 73]])
+
+    def test_triangulos_siguen_la_curva_del_cuerpo(self):
+        # Cabeza a la derecha; el segmento doblado apunta hacia abajo porque
+        # llego desde arriba, y la cola hereda esa direccion.
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'TRIANGLE'})
+        juego.posicion_comida = None
+        juego.serpiente_cuerpo = [(3, 2), (2, 2), (2, 1)]
+        juego.serpiente_direccion = (1, 0)
+        juego.dibujar()
+        self.assertEqual([p for p, _ in juego.canvas.poligonos],
+                         [[98, 62.5, 77, 52, 77, 73],
+                          [62.5, 73, 52, 52, 73, 52],
+                          [62.5, 48, 52, 27, 73, 27]])
+
     def test_comer(self):
         self.forzar_comida([(3, 2), (0, 4)])
         juego = Snake(datos_snake())
@@ -263,6 +451,40 @@ class TestSnake(TestSnakeBase):
         self.assertEqual(juego.canvas.rectangulos[-1][1], Colores.get("DARK GREEN", "#2EB72E"),
                          'en el frame siguiente vuelve a su color normal')
 
+    def test_cola_nyan_usa_colores_fijos_por_posicion(self):
+        # La cola de Nyan Cat va en degradado fijo: cabeza gris y despues
+        # rojo, naranja, verde, azul, morado, ciclando cada 5 segmentos.
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.nubes = []
+        juego.posicion_comida = None
+        juego.posicion_veneno = None
+        juego.posicion_powerup = None
+        juego.serpiente_cuerpo = [(0, i) for i in range(7)]
+        juego.dibujar()
+        colores = [color for _, color in juego.canvas.ovales]
+        self.assertEqual(colores, [
+            Colores.get("GRAY", "#7D7D7D"),
+            '#FF0000', '#FF7F00', '#00FF00', '#0000FF', '#AA00FF',
+            '#FF0000',
+        ])
+
+    def test_la_cola_nyan_no_se_anima_con_el_frame(self):
+        # El color depende de la posicion, no del frame: la cola no "corre".
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.nubes = []
+        juego.posicion_comida = None
+        juego.posicion_veneno = None
+        juego.posicion_powerup = None
+        juego.serpiente_cuerpo = [(0, i) for i in range(5)]
+        juego.dibujar()
+        antes = [color for _, color in juego.canvas.ovales]
+        juego.frame_counter += 3
+        juego.dibujar()
+        despues = [color for _, color in juego.canvas.ovales]
+        self.assertEqual(antes, despues)
+
     def test_veneno_no_hace_nada_estando_invulnerable(self):
         datos = datos_snake()
         datos['events']['ON_EAT_POISON'] = [accion('DECREASE_SCORE', '5')]
@@ -319,13 +541,22 @@ class TestSnake(TestSnakeBase):
     def test_invulnerabilidad_dura_segundos_no_ticks(self):
         datos = datos_snake()
         juego = Snake(datos)                     # 0.15 s por tick -> 3 s = 20 ticks
+        juego.posicion_comida = None             # aqui solo importa el cronometro
         juego.conceder_invulnerabilidad(3)
-        for _ in range(15):                      # 15 ticks = 2.25 s
+        for _ in range(19):                      # 19 ticks = 2.85 s
             juego.snake_mover_jugador()
         self.assertFalse(juego.juego_terminado,
-                         'a los 15 ticks (2.25 s) sigue dentro de los 3 s')
-        for _ in range(15):                      # 30 ticks = 4.5 s
+                         'a los 19 ticks (2.85 s) sigue dentro de los 3 s')
+        self.assertGreater(juego.tiempo_invulnerable, 0)
+        for _ in range(2):                       # 21 ticks: ya paso de 3 s
             juego.snake_mover_jugador()
+        self.assertLessEqual(juego.tiempo_invulnerable, 0,
+                             'la duracion es en segundos, no en ticks')
+
+        # Ya sin el power-up, la pared vuelve a matar.
+        juego.serpiente_cuerpo = [(4, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.snake_mover_jugador()
         self.assertTrue(juego.juego_terminado,
                         'pasados los 3 s la pared vuelve a matar')
 
