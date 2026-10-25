@@ -5,10 +5,15 @@ import random
 from .game import Game
 from .utilidades import Colores
 
-# Cola de Nyan Cat: degradado fijo (rojo, naranja, verde, azul, morado) que
-# cicla cada 5 segmentos. Depende de la posicion y no del frame: animarlo
-# hacia que la cola "corriera" y distraia del juego.
+# Cola de Nyan Cat: degradado arcoiris (rojo, naranja, verde, azul, morado) que
+# cicla cada 5 segmentos. Fluye hacia la cola con el avance de frames, pero a
+# paso lento (un desplazamiento cada FRAMES_POR_PASO_NYAN frames de 50 ms): si
+# cambiara en cada frame se veria como parpadeo y distraeria del juego.
 COLORES_NYAN = ["#FF0000", "#FF7F00", "#00FF00", "#0000FF", "#AA00FF"]
+FRAMES_POR_PASO_NYAN = 3
+
+# Las nubes van en gris claro para no confundirse con la cabeza blanca de Nyan Cat.
+COLOR_NUBE = "#A9A9A9"
 
 class Snake(Game):
 
@@ -27,50 +32,6 @@ class Snake(Game):
 
             # Generar los elementos del nivel inmediatamente al cargarlo
             self.generar_elementos_por_nivel()
-
-    def inicializar_estado(self):
-        self.serpiente_cuerpo = []
-        self.serpiente_direccion = (1, 0)
-        self.direccion_pendiente = None
-
-        self.posicion_comida = None
-        self.posicion_veneno = None
-        self.posicion_powerup = None
-        self.nubes = []
-
-        self.crecimiento_pendiente = 0
-        self.velocidad_gravedad = 0.15
-
-        if not hasattr(self, 'geometria_nivel') or not self.geometria_nivel:
-            self.geometria_nivel = "RECT"
-        self.tiempo_invulnerable = 0
-        self.tiempo_invulnerable_total = 0
-        self.frame_counter = 0
-
-    def iniciar_partida(self):
-        """Se ejecuta al iniciar la partida después de elegir nivel"""
-        if hasattr(super(Snake, self), 'iniciar_partida'):
-            super(Snake, self).iniciar_partida()
-
-        # Asegurar generación al arrancar la partida
-        self.generar_elementos_por_nivel()
-
-    def generar_elementos_por_nivel(self):
-        self.nubes = []
-        self.posicion_veneno = None
-        self.posicion_powerup = None
-
-        # 1. Nubes según CLOUDS_COUNT
-        for _ in range(getattr(self, 'cantidad_nubes', 0)):
-            self.snake_spawn_nube()
-
-        # 2. Veneno si POISON_ENABLED es True
-        if getattr(self, 'permitir_veneno', False):
-            self.snake_spawn_veneno()
-
-        # 3. Power-up si hay duración de invulnerabilidad
-        if getattr(self, 'duracion_inv_config', 0) > 0:
-            self.snake_spawn_powerup()
 
     def snake_spawn_nube(self, accion=None):
         params = (accion or {}).get('params', [])
@@ -147,8 +108,6 @@ class Snake(Game):
             self.snake_crecer(objeto, accion)
         elif verbo == 'GRANT_INVULNERABILITY':
             self.conceder_invulnerabilidad(objeto)
-        elif verbo == 'RESET_SCORE':
-            self.score = 0
 
     def dibujar_circulo_celda(self, x, y, color):
         """Dibuja un círculo exacto usando el canvas y la variable correcta del motor"""
@@ -254,6 +213,78 @@ class Snake(Game):
         else:
             self.dibujar_celda(x, y, color)
 
+    def _rotar_coord_celda(self, cx, cy, c, u, v, direccion):
+        """Rota una coordenada normalizada (u, v) en [-0.5, 0.5] segun la direccion.
+
+        Por convencion, (0, -0.5) es ARRIBA (frente de la cabeza) y +u es la
+        derecha de la cabeza. Devuelve la coordenada en pixeles del canvas.
+        """
+        dx, dy = direccion
+        if dx > 0:      # DERECHA (rotacion +90 deg)
+            return (cx - v * c, cy + u * c)
+        elif dx < 0:    # IZQUIERDA (rotacion -90 deg)
+            return (cx + v * c, cy - u * c)
+        elif dy > 0:    # ABAJO (rotacion 180 deg)
+            return (cx - u * c, cy - v * c)
+        else:           # ARRIBA (0 deg)
+            return (cx + u * c, cy + v * c)
+
+    def dibujar_cabeza_nyan(self, x, y, color, direccion=(1, 0)):
+        """Dibuja la cabeza circular de Nyan Cat orientada segun la direccion.
+
+        - Base circular: 1 solo create_oval (para no alterar canvas.ovales).
+        - Orejas: create_polygon orientadas hacia el frente.
+        - Ojos, mejillas y nariz: create_rectangle orientados al movimiento.
+        """
+        if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
+            c = float(self.taman_celda)
+            cx = (x + 0.5) * c
+            cy = (y + 0.5) * c
+            dx, dy = direccion
+
+            def P(u, v):
+                return self._rotar_coord_celda(cx, cy, c, u, v, direccion)
+
+            def poligono(puntos, relleno):
+                coords = []
+                for u, v in puntos:
+                    coords.extend(P(u, v))
+                self.canvas.create_polygon(coords, fill=relleno, outline="")
+
+            def rect(u_c, v_c, hw, hh, relleno):
+                # hw/hh son medias medidas en ejes de la cabeza: al mirar a un
+                # lado (dx != 0) los ejes del canvas se intercambian.
+                rx, ry = P(u_c, v_c)
+                mx = (hh if dx != 0 else hw) * c
+                my = (hw if dx != 0 else hh) * c
+                self.canvas.create_rectangle(rx - mx, ry - my, rx + mx, ry + my,
+                                             fill=relleno, outline="")
+
+            # 1. Orejitas triangulares (poligonos): exterior del color de la
+            # cabeza e interior rosado, izquierda y derecha.
+            poligono([(-0.38, -0.12), (-0.32, -0.46), (-0.06, -0.28)], color)
+            poligono([(-0.32, -0.18), (-0.28, -0.38), (-0.12, -0.26)], "#FFAAA6")
+            poligono([(0.38, -0.12), (0.32, -0.46), (0.06, -0.28)], color)
+            poligono([(0.32, -0.18), (0.28, -0.38), (0.12, -0.26)], "#FFAAA6")
+
+            # 2. Base circular de la cabeza (exactamente 1 ovalo)
+            self.dibujar_circulo_celda(x, y, color)
+
+            # 3. Mejillas rosadas (rectangulos)
+            rect(-0.28, 0.14, 0.07, 0.07, "#FFAAA6")
+            rect(0.28, 0.14, 0.07, 0.07, "#FFAAA6")
+
+            # 4. Ojos oscuros con brillo blanco (rectangulos)
+            rect(-0.16, -0.04, 0.08, 0.09, "#000000")
+            rect(-0.18, -0.07, 0.03, 0.03, "#FFFFFF")
+            rect(0.16, -0.04, 0.08, 0.09, "#000000")
+            rect(0.14, -0.07, 0.03, 0.03, "#FFFFFF")
+
+            # 5. Nariz / hocico
+            rect(0.0, 0.08, 0.04, 0.03, "#000000")
+        else:
+            self.dibujar_circulo_celda(x, y, color)
+
     def dibujar_elementos(self):
         # Incrementar el contador de frames para el parpadeo de la cabeza
         # invulnerable (la cola ya no se anima).
@@ -261,7 +292,7 @@ class Snake(Game):
 
         # 1. Dibujar Nubes Obstáculo
         for nube in self.nubes:
-            self.dibujar_nube_celda(nube[0], nube[1], Colores.get("WHITE", '#A9A9A9'))
+            self.dibujar_nube_celda(nube[0], nube[1], COLOR_NUBE)
 
         # 2. Dibujar Comida, Veneno y Power-up
         # Las tres bayas comparten el mismo icono: solo cambia el color
@@ -281,10 +312,12 @@ class Snake(Game):
             # Asignación de colores usando Arcoiris y Colores desde utilidades.py
             if geo == "NYAN_CAT":
                 if i == 0:
-                    color = Colores.get("GRAY", "#7D7D7D")  # Gris para la cabeza
+                    color = Colores.get("WHITE", "#FFFFFF")  # Cabeza blanca
                 else:
-                    # Degradado fijo por posicion: la cola no se anima.
-                    color = COLORES_NYAN[(i - 1) % len(COLORES_NYAN)]
+                    # La cola arcoiris fluye hacia atras: el desplazamiento
+                    # avanza un paso cada FRAMES_POR_PASO_NYAN frames.
+                    offset = (self.frame_counter - 1) // FRAMES_POR_PASO_NYAN
+                    color = COLORES_NYAN[(i - 1 - offset) % len(COLORES_NYAN)]
             else:
                 color = Colores.get("DARK GREEN", "#2EB72E") if i == 0 else Colores.get("GREEN", '#33CC33')
 
@@ -294,8 +327,13 @@ class Snake(Game):
                 color = Colores.get("YELLOW", '#FFFF00')
 
             # Renderizado físico según la geometría del nivel deseado
-            if geo == "CIRCLE" or geo == "NYAN_CAT":
-                # Tanto la cabeza como la cola de Nyan Cat y el modo círculo usan óvalos
+            if geo == "NYAN_CAT":
+                # La cabeza lleva rasgos de gato; la cola son óvalos simples
+                if i == 0:
+                    self.dibujar_cabeza_nyan(x, y, color, self.serpiente_direccion)
+                else:
+                    self.dibujar_circulo_celda(x, y, color)
+            elif geo == "CIRCLE":
                 self.dibujar_circulo_celda(x, y, color)
             elif geo == "TRIANGLE":
                 # El nivel Entusiasta usa triángulos orientados hacia donde
@@ -319,6 +357,7 @@ class Snake(Game):
     def inicializar_estado(self):
         self.serpiente_cuerpo = []
         self.serpiente_direccion = (1, 0)
+        self.cooldown_powerup = 0
         self.direccion_pendiente = None
 
         self.posicion_comida = None
@@ -359,6 +398,7 @@ class Snake(Game):
         # 3. Power-up si hay duración de invulnerabilidad
         if getattr(self, 'duracion_inv_config', 0) > 0:
             self.snake_spawn_powerup()
+        self.cooldown_powerup = 0
 
     def _casillas_ocupadas(self):
         """Cuerpo, nubes y los tres consumibles: nada puede aparecer aqui."""
@@ -458,6 +498,16 @@ class Snake(Game):
             # dura 10 s reales aunque el nivel corra a 0.06 s por tick.
             self.tiempo_invulnerable -= self.velocidad_gravedad
 
+        # Cooldown del power-up: tras comerlo no reaparece al instante; el
+        # motor lo reubica cuando el contador (en segundos) llega a 0.
+        if getattr(self, 'cooldown_powerup', 0) > 0:
+            self.cooldown_powerup -= self.velocidad_gravedad
+            if self.cooldown_powerup <= 0:
+                self.cooldown_powerup = 0
+                if (getattr(self, 'duracion_inv_config', 0) > 0
+                        and self.posicion_powerup is None):
+                    self.snake_spawn_powerup()
+
         if self.direccion_pendiente is not None:
             self.serpiente_direccion = self.direccion_pendiente
             self.direccion_pendiente = None
@@ -467,18 +517,35 @@ class Snake(Game):
         nueva_cabeza = (cabeza_x + dir_x, cabeza_y + dir_y)
 
         es_invulnerable = self.tiempo_invulnerable > 0
+        # El escudo de puntos lo decide la geometria declarada por el nivel,
+        # no su nombre (el motor no compara contra nombres de nivel).
+        es_nyan_cat = str(getattr(self, 'geometria_nivel', '')).upper() == 'NYAN_CAT'
 
         # 1. Pared: sin power-up mata; con power-up envuelve al lado opuesto.
         if not self._dentro_del_tablero(nueva_cabeza):
-            if not es_invulnerable:
+            if es_invulnerable:
+                nueva_cabeza = (nueva_cabeza[0] % self.ancho,
+                                nueva_cabeza[1] % self.alto)
+            elif es_nyan_cat and self.puntuacion > 0:
+                # Nyan Cat: los puntos hacen de escudo. Se pierden todos y
+                # la serpiente envuelve al lado opuesto en vez de morir.
+                self.puntuacion = 0
+                nueva_cabeza = (nueva_cabeza[0] % self.ancho,
+                                nueva_cabeza[1] % self.alto)
+            else:
                 self.ejecutar_evento('ON_COLLISION_WALL')
                 return
-            nueva_cabeza = (nueva_cabeza[0] % self.ancho,
-                            nueva_cabeza[1] % self.alto)
 
         # 2. Nube: con power-up se atraviesa; sin el, desvia o mata.
         elif hasattr(self, 'nubes') and nueva_cabeza in self.nubes:
             if not es_invulnerable:
+                # Las nubes son fijas toda la partida. Con 0 puntos matan; con
+                # puntos los pierden todos y la serpiente se desvia.
+                if self.puntuacion == 0:
+                    self.juego_terminado = True
+                    return
+                self.puntuacion = 0
+                self.ejecutar_evento('ON_COLLISION_CLOUD')
                 nueva_cabeza = self._redirigir_tras_choque()
                 if nueva_cabeza is None:
                     # OJO: el evento se llama ON_GAME_OVER; ejecutar_evento('GAME_OVER')
@@ -492,8 +559,16 @@ class Snake(Game):
             cuerpo_solido = self.serpiente_cuerpo if (self.crecimiento_pendiente > 0 or comiendo) else self.serpiente_cuerpo[:-1]
 
             if nueva_cabeza in cuerpo_solido and not es_invulnerable:
-                self.ejecutar_evento('ON_COLLISION_SELF')
-                return
+                if es_nyan_cat and self.puntuacion > 0:
+                    # Nyan Cat: escudo de puntos. Los pierde todos y busca
+                    # desvio; si no hay, atraviesa el cuerpo esta vez.
+                    self.puntuacion = 0
+                    desvio = self._redirigir_tras_choque()
+                    if desvio is not None:
+                        nueva_cabeza = desvio
+                else:
+                    self.ejecutar_evento('ON_COLLISION_SELF')
+                    return
 
         # 4. Insertar la nueva cabeza
         self.serpiente_cuerpo.insert(0, nueva_cabeza)
@@ -507,20 +582,28 @@ class Snake(Game):
             self.ejecutar_evento('ON_EAT_FOOD')
             if self.posicion_comida == nueva_cabeza:
                 self.posicion_comida = self._obtener_posicion_libre()
-        elif (hasattr(self, 'posicion_veneno') and nueva_cabeza == self.posicion_veneno
-              and not es_invulnerable):
-            # Con el power-up activo la baya morada esta neutralizada: no resta
-            # puntos, no termina la partida y tampoco se consume.
-            self.ejecutar_evento('ON_EAT_POISON')
-            if self.posicion_veneno == nueva_cabeza:
+        elif hasattr(self, 'posicion_veneno') and nueva_cabeza == self.posicion_veneno:
+            if es_invulnerable:
+                # Con el power-up activo la baya morada se despeja y se
+                # reubica sin penalizar: no resta puntos ni termina la partida.
                 self.posicion_veneno = self._obtener_posicion_libre()
-            # POISON_KILLS es del nivel, no del evento: solo algunos niveles
-            # convierten la baya en game over.
-            if getattr(self, 'veneno_mata', False):
-                self.juego_terminado = True
+            else:
+                self.ejecutar_evento('ON_EAT_POISON')
+                if self.posicion_veneno == nueva_cabeza:
+                    self.posicion_veneno = self._obtener_posicion_libre()
+                # POISON_KILLS es del nivel, no del evento: solo algunos
+                # niveles convierten la baya en game over.
+                if getattr(self, 'veneno_mata', False):
+                    self.juego_terminado = True
         elif hasattr(self, 'posicion_powerup') and nueva_cabeza == self.posicion_powerup:
+            pos_anterior = self.posicion_powerup
             self.ejecutar_evento('ON_EAT_POWERUP')
-            if self.posicion_powerup == nueva_cabeza:
+            if getattr(self, 'duracion_inv_config', 0) > 0:
+                # Nivel con power-up: no reaparece al instante, entra en
+                # cooldown de 5 s y el motor lo reubica al terminar.
+                self.posicion_powerup = None
+                self.cooldown_powerup = 5.0
+            elif self.posicion_powerup == pos_anterior:
                 self.posicion_powerup = self._obtener_posicion_libre()
 
         # 6. Manejar crecimiento o recortar la cola

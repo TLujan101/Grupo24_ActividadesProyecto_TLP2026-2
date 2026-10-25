@@ -99,6 +99,7 @@ class TestSnake(TestSnakeBase):
 
     def test_el_desvio_tras_una_nube_tampoco_reversa(self):
         juego = Snake(datos_snake())
+        juego.puntuacion = 10
         juego.serpiente_cuerpo = [(2, 2), (3, 2)]
         juego.serpiente_direccion = (-1, 0)
         juego.nubes = [(1, 2)]
@@ -159,9 +160,9 @@ class TestSnake(TestSnakeBase):
         self.assertIsNotNone(juego.posicion_comida)
         self.assertNotEqual(juego.posicion_comida, (0, 0))
 
-    def test_nube_redirige_y_no_resetea_puntos(self):
-        # Chocar con una nube ya no castiga: la serpiente se desvia a la
-        # primera direccion libre (derecha, abajo, izquierda, arriba) y avanza.
+    def test_nube_redirige_y_resetea_puntos(self):
+        # Chocar con una nube cuesta todos los puntos: la serpiente se desvia a
+        # la primera direccion libre (derecha, abajo, izquierda, arriba) y avanza.
         juego = Snake(datos_snake())
         juego.puntuacion = 20
         juego.serpiente_cuerpo = [(2, 2)]
@@ -170,14 +171,24 @@ class TestSnake(TestSnakeBase):
         juego.posicion_comida = (4, 4)
         juego.ejecutar_evento('ON_TICK')
         self.assertFalse(juego.juego_terminado)
-        self.assertEqual(juego.puntuacion, 20, 'la nube ya no borra los puntos')
+        self.assertEqual(juego.puntuacion, 0, 'la nube drena todos los puntos a 0')
         self.assertEqual(juego.serpiente_direccion, (0, 1))
         self.assertEqual(juego.serpiente_cuerpo[0], (2, 3),
                          'redirige y avanza en el mismo tick')
 
+    def test_nube_con_cero_puntos_mata_inmediatamente(self):
+        juego = Snake(datos_snake())
+        juego.puntuacion = 0
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.nubes = [(3, 2)]
+        juego.ejecutar_evento('ON_TICK')
+        self.assertTrue(juego.juego_terminado, 'chocar contra nube con 0 puntos termina la partida')
+
     def test_nube_acorralada_mata(self):
         # Sin ninguna direccion libre alrededor, la nube mata.
         juego = Snake(datos_snake())
+        juego.puntuacion = 10
         juego.serpiente_cuerpo = [(0, 0)]
         juego.serpiente_direccion = (1, 0)
         juego.nubes = [(1, 0), (0, 1)]
@@ -451,8 +462,8 @@ class TestSnake(TestSnakeBase):
         self.assertEqual(juego.canvas.rectangulos[-1][1], Colores.get("DARK GREEN", "#2EB72E"),
                          'en el frame siguiente vuelve a su color normal')
 
-    def test_cola_nyan_usa_colores_fijos_por_posicion(self):
-        # La cola de Nyan Cat va en degradado fijo: cabeza gris y despues
+    def test_cola_nyan_primer_frame_usa_degradado_en_orden(self):
+        # En el primer frame la cabeza es blanca y la cola va en orden:
         # rojo, naranja, verde, azul, morado, ciclando cada 5 segmentos.
         juego = Snake(datos_snake())
         juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
@@ -461,16 +472,57 @@ class TestSnake(TestSnakeBase):
         juego.posicion_veneno = None
         juego.posicion_powerup = None
         juego.serpiente_cuerpo = [(0, i) for i in range(7)]
+        juego.frame_counter = 0    # el primer dibujar() es el frame 1 (offset 0)
         juego.dibujar()
         colores = [color for _, color in juego.canvas.ovales]
         self.assertEqual(colores, [
-            Colores.get("GRAY", "#7D7D7D"),
+            Colores.get("WHITE", "#FFFFFF"),
             '#FF0000', '#FF7F00', '#00FF00', '#0000FF', '#AA00FF',
             '#FF0000',
         ])
 
-    def test_la_cola_nyan_no_se_anima_con_el_frame(self):
-        # El color depende de la posicion, no del frame: la cola no "corre".
+    def test_cabeza_nyan_dibuja_circulo_con_rasgos_de_gato(self):
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.nubes = []
+        juego.posicion_comida = None
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.dibujar()
+
+        # Debe tener exactamente un circulo base blanco
+        self.assertEqual(len(juego.canvas.ovales), 1)
+        self.assertEqual(juego.canvas.ovales[0][1], Colores.get("WHITE", "#FFFFFF"))
+
+        # Debe tener poligonos correspondientes a las orejitas
+        self.assertGreaterEqual(len(juego.canvas.poligonos), 2)
+
+        # Debe tener rectangulos correspondientes a los ojos, mejillas y nariz
+        self.assertGreaterEqual(len(juego.canvas.rectangulos), 4)
+
+    def test_cabeza_nyan_orienta_segun_direccion(self):
+        # Al cambiar la direccion, los vertices de las orejitas rotan con ella.
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.posicion_comida = None       # la baya tambien es un ovalo
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.serpiente_direccion = (0, -1)  # ARRIBA
+        juego.dibujar()
+        poligonos_up = list(juego.canvas.poligonos)
+        ovales_up = list(juego.canvas.ovales)
+
+        juego.serpiente_direccion = (1, 0)   # DERECHA
+        juego.dibujar()
+        poligonos_right = list(juego.canvas.poligonos)
+
+        self.assertNotEqual(poligonos_up, poligonos_right,
+                            'los vertices de las orejas deben rotar con la direccion')
+        # Sigue siendo un unico ovalo en cualquier orientacion
+        self.assertEqual(len(juego.canvas.ovales), 1)
+        self.assertEqual(juego.canvas.ovales, ovales_up)
+
+    def test_la_cola_nyan_fluye_dinamicamente_con_los_frames(self):
+        # La cola arcoiris fluye, pero a paso lento (un paso cada 3 frames):
+        # dentro de un mismo paso no cambia, y pasado el paso si.
         juego = Snake(datos_snake())
         juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
         juego.nubes = []
@@ -478,14 +530,20 @@ class TestSnake(TestSnakeBase):
         juego.posicion_veneno = None
         juego.posicion_powerup = None
         juego.serpiente_cuerpo = [(0, i) for i in range(5)]
-        juego.dibujar()
-        antes = [color for _, color in juego.canvas.ovales]
-        juego.frame_counter += 3
-        juego.dibujar()
-        despues = [color for _, color in juego.canvas.ovales]
-        self.assertEqual(antes, despues)
+        juego.dibujar()                       # frame 1
+        frame1 = [color for _, color in juego.canvas.ovales]
+        juego.dibujar()                       # frame 2: mismo paso
+        frame2 = [color for _, color in juego.canvas.ovales]
+        juego.dibujar()                       # frame 3: mismo paso
+        juego.dibujar()                       # frame 4: siguiente paso
+        frame4 = [color for _, color in juego.canvas.ovales]
+        self.assertEqual(frame1, frame2, 'no parpadea dentro del mismo paso')
+        # La cabeza sigue blanca, pero la cola fluyo
+        self.assertEqual(frame1[0], frame4[0])
+        self.assertNotEqual(frame1[1:], frame4[1:],
+                            'los colores de la cola deben fluir con los frames')
 
-    def test_veneno_no_hace_nada_estando_invulnerable(self):
+    def test_veneno_se_despeja_estando_invulnerable(self):
         datos = datos_snake()
         datos['events']['ON_EAT_POISON'] = [accion('DECREASE_SCORE', '5')]
         juego = Snake(datos)
@@ -495,9 +553,9 @@ class TestSnake(TestSnakeBase):
         juego.posicion_veneno = (3, 2)
         juego.tiempo_invulnerable = 3
         juego.ejecutar_evento('ON_TICK')
-        self.assertFalse(juego.juego_terminado, 'la invulnerabilidad neutraliza la baya morada')
-        self.assertEqual(juego.puntuacion, 10, 'tampoco resta puntos')
-        self.assertEqual(juego.posicion_veneno, (3, 2), 'la baya no se consume')
+        self.assertFalse(juego.juego_terminado)
+        self.assertEqual(juego.puntuacion, 10, 'no resta puntos')
+        self.assertNotEqual(juego.posicion_veneno, (3, 2), 'la baya se consume y reposiciona')
 
     def test_veneno_sin_poison_kills_no_mata(self):
         datos = datos_snake()
@@ -559,6 +617,53 @@ class TestSnake(TestSnakeBase):
         juego.snake_mover_jugador()
         self.assertTrue(juego.juego_terminado,
                         'pasados los 3 s la pared vuelve a matar')
+
+    def test_nyan_cat_colision_pared_gasta_puntos_y_salva(self):
+        juego = Snake(datos_snake(inicio=(4, 2)))
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.puntuacion = 30
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado, 'con puntos, Nyan Cat no muere contra la pared')
+        self.assertEqual(juego.puntuacion, 0, 'pierde todos los puntos como penalizacion')
+        self.assertEqual(juego.serpiente_cuerpo[0], (0, 2), 'hace wrap-around al otro lado')
+
+    def test_nyan_cat_colision_pared_con_cero_puntos_muere(self):
+        juego = Snake(datos_snake(inicio=(4, 2)))
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.puntuacion = 0
+        juego.ejecutar_evento('ON_TICK')
+        self.assertTrue(juego.juego_terminado, 'con 0 puntos, la pared es mortal')
+
+    def test_nyan_cat_colision_cuerpo_gasta_puntos_y_salva(self):
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'geometry': 'NYAN_CAT'})
+        juego.puntuacion = 50
+        juego.serpiente_cuerpo = [(2, 2), (2, 3), (1, 3), (1, 2), (1, 1)]
+        juego.serpiente_direccion = (-1, 0)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertFalse(juego.juego_terminado, 'con puntos sobrevive a la auto-colision')
+        self.assertEqual(juego.puntuacion, 0)
+
+    def test_powerup_cooldown_reaparicion(self):
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'invulnerability_duration': 5})
+        juego.serpiente_cuerpo = [(2, 2)]
+        juego.serpiente_direccion = (1, 0)
+        juego.posicion_powerup = (3, 2)
+        juego.posicion_comida = (0, 0)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertIsNone(juego.posicion_powerup, 'al comerlo queda en cooldown y no reaparece al instante')
+        self.assertGreater(juego.cooldown_powerup, 0)
+
+    def test_powerup_reaparece_al_acabar_el_cooldown(self):
+        juego = Snake(datos_snake())
+        juego.cargar_configuracion_nivel({'invulnerability_duration': 5})
+        juego.posicion_powerup = None
+        juego.cooldown_powerup = 0.1
+        juego.posicion_comida = (0, 0)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.cooldown_powerup, 0)
+        self.assertIsNotNone(juego.posicion_powerup)
 
     def test_tick_del_nivel(self):
         # snake.py no cambia: el nivel pisa el 0.15 que Snake deja en

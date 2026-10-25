@@ -1,67 +1,341 @@
-Documentación de Cambios: Sistema de Dificultad y Geometrías en Snake (BrickScript)
-Este documento detalla las modificaciones incrementales realizadas para implementar un sistema de multi-nivel de dificultad (Baby, Entusiasta, Nyan Cat), la integración de nuevas propiedades de configuración en el lenguaje DSL (.brick), y su correcta interpretación y renderizado en el motor en Python (snake.py).
+---------------------------------------  CAMBIOS CON RESPECTO A SNAKE.BRICK ---------------------------------------
 
+RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 4)
+- Miguel Angel Echeverri Isaza (motor gráfico, estética y colisiones): renderizado de geometrías
+  (círculos y triángulos orientados), cabeza de Nyan Cat (blanca de alto contraste con rasgos y
+  orientación 2D dinámica), estela arcoíris animada cuadro a cuadro, y mecánicas de colisión y
+  escudo de puntos en Nyan Cat.
 
-1. Modificaciones en el Lenguaje DSL y Gramática (.brick / .bnf)
-Se extendió la gramática y el archivo de definición del juego para soportar parámetros granulares por cada nivel de dificultad:
+- Tomas Lujan Colorado (lenguaje, compilador y toolchain): extensiones a snake.bnf (bloque LEVELS,
+  GEOMETRY, modales de veneno/nubes/powerup, reales y booleanos), actualización del parser y lexer en
+  compiler.py, y redacción/estructuración de este changelog.
 
-Nuevos Modificadores de Nivel:
+- Nixon Daniel Lizcano Santana (arquitectura, niveles y robustecimiento): menú de selección de niveles
+  en engine/game.py, desacople de eventos globales hacia perfiles por nivel, temporizadores de invulnerabilidad
+  y cooldown del power-up en engine/snake.py, y suites de tests unitarios en Python 2.7.
 
-POISON_ENABLED: Define si las frutas venenosas están habilitadas (TRUE / FALSE).
-POISON_KILLS: Define si comer fruta venenosa termina la partida en ese nivel (TRUE / FALSE). Por defecto FALSE: el veneno solo resta puntos.
-CLOUDS_COUNT: Define la cantidad exacta de nubes obstáculo que se generan al iniciar el nivel.
-INVULNERABILITY_DURATION: Controla los segundos que dura el power-up de invulnerabilidad.
-GEOMETRY: Permite asignar formas geométricas específicas al nivel (RECT, CIRCLE, TRIANGLE, NYAN_CAT).
+- Andrés Felipe Bustamante López (audio sintetizado, balance y obstáculos): composición del tema polifónico
+  TEMA_NYAN de 2 voces en onda cuadrada con verificación de MD5, efectos de sonido (COMER, VENENO,
+  POWERUP_FX, MORIR), balance de ticks y diseño de nubes obstáculo y bayas venenosas.
 
-Estructura de Niveles en snake_remake.brick:
+------------------------------ 1. MODIFICACIONES EN EL LENGUAJE DSL Y GRAMÁTICA ------------------------------
 
-BABY: TICK 0.18, GEOMETRY RECT, POISON_ENABLED FALSE, CLOUDS_COUNT 0.
-ENTUSIASTA: TICK 0.12, GEOMETRY TRIANGLE, POISON_ENABLED TRUE, INVULNERABILITY_DURATION 10, CLOUDS_COUNT 0.
-NYAN_CAT: TICK 0.06, GEOMETRY NYAN_CAT, POISON_ENABLED TRUE, POISON_KILLS TRUE, INVULNERABILITY_DURATION 15, CLOUDS_COUNT 3.
+>>>>>> Extensión de la gramática formal para soporte de geometrías, niveles y consumibles:
+Archivos modificados: grammars/snake.bnf, compiler.py
 
-POISON_KILLS solo se declara en NYAN_CAT: en el nivel máximo la baya venenosa termina la partida; en el resto sigue siendo una penalización de puntos.
+Se extendió la gramática formal BNF para admitir bloques de niveles de dificultad (LEVELS), geometrías
+adicionales en DEFINE SHAPE, nuevos eventos y acciones específicas para consumibles y obstáculos:
 
+<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <geometria> <extras> ":" <estados> "END"
+<geometria> ::= "" | "GEOMETRY" <forma_geometrica>
+<forma_geometrica> ::= "RECT" | "CIRCLE" | "TRIANGLE" | "NYAN_CAT"
 
-2. Actualizaciones en el Compilador (compiler.py)
-Se actualizó la tabla de mapeo de modificadores (MODIFICADORES_NIVEL) para que reconozca POISON_ENABLED y CLOUDS_COUNT.
-Se ajustó el parser del compilador para procesar valores booleanos (TRUE/FALSE) y numéricos enteros sin comprometer la validación de sintaxis ni generar errores críticos al exportar al archivo de datos estructurados consumido por el motor.
+<niveles>          ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
+<elegir_nivel>     ::= "" | "START" ":" <identificador>
+<definicion_nivel> ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
+<modificador_nivel> ::= "TICK" <real> | "MUSIC" <identificador> | "INVULNERABILITY_DURATION" <numero> | "GEOMETRY" <forma_geometrica> | "POISON_ENABLED" <estado_booleano> | "POISON_KILLS" <estado_booleano> | "CLOUDS_COUNT" <numero>
 
+>>>>>> Soporte léxico y sintáctico en el compilador para decimales y modificadores:
+Archivo modificado: compiler.py (lineas 15, 211, 398)
 
-3. Modificaciones en el Motor de Juego (snake.py)
-Se reestructuró la lógica interna de snake.py para desacoplar los elementos estáticos del evento global ON START y delegarlos de forma dinámica según la configuración del nivel activo:
+El compilador original fallaba con números reales y booleanos. Se ajustó el lexer para reconocer tokens
+de punto flotante (ej. TICK 0.06) y se agregaron los modificadores al diccionario del parser:
 
-Lectura de Configuración del Nivel:
+compiler.py:
+    MODIFICADORES_NIVEL = {
+        'TICK': ('tick', 'real'),
+        'MUSIC': ('music', 'nombre'),
+        'INVULNERABILITY_DURATION': ('invulnerability_duration', 'numero'),
+        'GEOMETRY': ('geometry', 'nombre'),
+        'POISON_ENABLED': ('poison_enabled', 'booleano'),
+        'POISON_KILLS': ('poison_kills', 'booleano'),
+        'CLOUDS_COUNT': ('clouds_count', 'numero')
+    }
 
-Se mejoró el método cargar_configuracion_nivel y elegir_nivel para extraer con precisión la geometría, la duración de la invulnerabilidad, el flag de veneno y la cantidad de nubes ya sea por índice numérico o por el nombre del nivel.
+------------------------------ 2. NUEVAS GEOMETRÍAS Y FORMAS IMPLEMENTADAS ------------------------------
 
-Generación Dinámica de Elementos (generar_elementos_por_nivel):
+>>>>>> Declaración de formas no rectangulares en el archivo .brick:
+Archivo modificado: games/snake_remake.brick (lineas 8-30)
 
-Se separó la lógica de instanciación para que las nubes se generen de acuerdo al número configurado (CLOUDS_COUNT), el veneno aparezca únicamente si POISON_ENABLED es TRUE, y el power-up se cargue solo si hay una duración de invulnerabilidad válida.
+Frente al PIXEL RECT único de snake.brick, se incorporan definiciones de formas circulares, triangulares
+y la cabeza especial de Nyan Cat:
 
-Renderizado y Geometrías:
+DEFINE SHAPE CUERPO_CIRCULAR GEOMETRY CIRCLE COLOR BLUE:
+  STATE 1:
+    [1]
+  END
+END
 
-Corrección en la asignación de variables de render (taman_celda) para evitar conflictos en las formas circulares y triangulares.
-Implementación de la animación de cola arcoíris basada en un contador de fotogramas (frame_counter) para el nivel Nyan Cat.
-Ajuste del color predeterminado de la cabeza de la serpiente en niveles estándar a un tono verde oscuro diferenciado del cuerpo.
-La fruta normal se dibuja ahora con el mismo icono de baya (tallo, baya y hoja) que la venenosa, diferenciada solo por el color (roja para la normal, morada para la venenosa).
-El power-up también usa ese icono, en amarillo. Como las tres bayas comparten la misma forma, el método se renombró de dibujar_veneno_celda a dibujar_baya_celda: el nombre decía "veneno" y ya no servía.
+DEFINE SHAPE CUERPO_TRIANGULAR GEOMETRY TRIANGLE COLOR GREEN:
+  STATE 1:
+    [1]
+  END
+END
 
-Invulnerabilidad (power-up "No Morir"):
+DEFINE SHAPE CABEZA_NYAN GEOMETRY NYAN_CAT COLOR PURPLE:
+  STATE 1:
+    [1, 1]
+    [1, 1]
+  END
+END
 
-GRANT_INVULNERABILITY conserva su número como respaldo, pero si el nivel declara INVULNERABILITY_DURATION, el valor del nivel es el que se concede: NYAN_CAT otorga 15 segundos y ENTUSIASTA 10, en lugar del 10 fijo que decía el evento global ON EAT_POWERUP.
-La cuenta atrás se decrementa en segundos de juego (velocidad_gravedad, es decir TICK del nivel) y no en ticks: antes un valor de 10 duraba 10 ticks, que en NYAN_CAT eran 0.6 s en vez de 10 s.
-La cabeza parpadea en amarillo mientras dura el power-up. El parpadeo se acelera conforme se acaba el tiempo (de 6 frames, unos 300 ms, a 1 frame, 50 ms) para que el jugador note que le queda poco. El intervalo lo calcula intervalo_parpadeo() a partir de la duración concedida y la que queda.
-Con el power-up activo la baya morada queda neutralizada: no resta puntos, no termina la partida aunque el nivel declare POISON_KILLS TRUE y tampoco se consume (sigue ahí para cuando se acabe la invulnerabilidad).
+>>>>>> Renderizado físico de triángulos con orientación dinámica por segmento:
+Archivo modificado: engine/snake.py (metodos _direccion_del_segmento y dibujar_triangulo_celda)
 
-Tema Nyan Cat (TEMA_NYAN):
+Cada segmento triangular en el nivel Entusiasta apunta en la dirección en la que viajó ese fragmento
+del cuerpo, calculando el vector respecto al segmento adyacente:
 
-El tema dejo de ser la transcripcion del tema publicado y paso a ser un tema propio de dos voces (lead + arpegio), en onda cuadrada: 6 compases de 4/4 a 150 BPM (corchea de 200 ms), 48 slots por voz, 9.6 s de loop. Progresion C - Am - F - G - C - G7>C, con el lead en octavas 5-6 y el arpegio en la octava 3.
-En el .brick cada voz es un bloque VOICE con 48 NOTE; el sintetizador las mezcla muestra a muestra y normaliza el pico.
-El tema queda congelado con un md5 dorado del PCM (b5c00a9d824a221678215ea6ca64c173), calculado sobre el preview que se escucho antes de fijarlo. Los tests comprueban ademas que las dos voces duran lo mismo (9.600 ms) y que ninguna tiene un silencio mas largo que un slot.
-El compas 6 se queda en dominante (G7) y la resolucion cae en el empalme del loop: el lead baja de D5 a C5 y el bajo sube de B2 a C3 (la sensible), para que no suene el C5|C5 ni el C3 C3|C3 del repetidor.
-La transcripcion de referencia queda archivada en tests/fixtures/nyan_melodia.json como documento de trabajo: ya no la usa ningun test.
+def dibujar_triangulo_celda(self, x, y, color, direccion=(0, -1)):
+    c = self.taman_celda
+    x1, y1 = x * c, y * c
+    x2, y2 = x1 + c, y1 + c
+    m = 2
+    cx, cy = x1 + c / 2.0, y1 + c / 2.0
+    dx, dy = direccion
+    if dx > 0:      # Derecha
+        puntos = [x2 - m, cy, x1 + m, y1 + m, x1 + m, y2 - m]
+    elif dx < 0:    # Izquierda
+        puntos = [x1 + m, cy, x2 - m, y1 + m, x2 - m, y2 - m]
+    elif dy < 0:    # Arriba
+        puntos = [cx, y1 + m, x1 + m, y2 - m, x2 - m, y2 - m]
+    else:           # Abajo
+        puntos = [cx, y2 - m, x1 + m, y1 + m, x2 - m, y1 + m]
+    self.canvas.create_polygon(puntos, fill=color, outline="")
 
-Veneno mortal por nivel (POISON_KILLS):
+------------------------------ 3. SISTEMA MULTI-NIVEL DE DIFICULTAD ------------------------------
 
-El evento ON EAT_POISON es global y no puede decidir si la partida termina, así que esa decisión vive en el modificador por nivel POISON_KILLS. Al comer veneno se ejecuta el evento (resta de puntos, efecto y reaparición) y, solo si el nivel activo declara POISON_KILLS TRUE, se marca el fin de la partida, lo que dispara ON GAME_OVER.
-El compilador convierte TRUE/FALSE a booleano (tipo "booleano" en MODIFICADORES_NIVEL); sin esa conversión el motor recibiría el string "FALSE" y bool("FALSE") sería True.
+>>>>>> Declaración del bloque LEVELS con 3 configuraciones estrictas:
+Archivo modificado: games/snake_remake.brick (lineas 194-219)
+
+A diferencia de snake.brick (que carecía de selector de niveles y corría a velocidad fija), se definen
+tres niveles con parámetros específicos de velocidad, geometría, música y obstáculos:
+
+LEVELS:
+  START: BABY
+  LEVEL BABY:
+    MUSIC TEMA_CALMO
+    TICK 0.18
+    GEOMETRY RECT
+    CLOUDS_COUNT 0
+  END
+  LEVEL ENTUSIASTA:
+    MUSIC TEMA_ENTUSIASTA
+    TICK 0.12
+    GEOMETRY TRIANGLE
+    POISON_ENABLED TRUE
+    INVULNERABILITY_DURATION 7
+    CLOUDS_COUNT 2
+  END
+  LEVEL NYAN_CAT:
+    MUSIC TEMA_NYAN
+    TICK 0.06
+    GEOMETRY NYAN_CAT
+    POISON_ENABLED TRUE
+    POISON_KILLS TRUE
+    INVULNERABILITY_DURATION 5
+    CLOUDS_COUNT 4
+  END
+END
+
+>>>>>> Menú interactivo lateral y conmutación de dificultad en tiempo real:
+Archivos modificados: engine/game.py, engine/snake.py (metodo elegir_nivel)
+
+El panel lateral genera botones numerados ('1. Baby', '2. Entusiasta', '3. Nyan Cat') accesibles
+por clic o teclado ('1', '2', '3'), cargando dinámicamente la configuración y reiniciando las entidades:
+
+def elegir_nivel(self, nombre_nivel):
+    super(Snake, self).elegir_nivel(nombre_nivel)
+    self.nivel_actual = nombre_nivel
+    # Carga geometria_nivel, duracion_inv_config, permitir_veneno, veneno_mata, cantidad_nubes
+    self.cargar_configuracion_nivel(lvl_val)
+
+------------------------------ 4. SISTEMA DE FRUTAS Y OBSTÁCULOS ------------------------------
+
+>>>>>> Frutas Venenosas (baya morada) y muerte condicionada al nivel:
+Archivos modificados: games/snake_remake.brick, engine/snake.py
+
+En snake.brick solo existía FOOD. Ahora se generan frutas venenosas que descuentan 5 puntos en Baby/Entusiasta
+y activan Game Over inmediato en Nyan Cat gracias al flag POISON_KILLS:
+
+elif hasattr(self, 'posicion_veneno') and nueva_cabeza == self.posicion_veneno:
+    if es_invulnerable:
+        self.posicion_veneno = self._obtener_posicion_libre()
+    else:
+        self.ejecutar_evento('ON_EAT_POISON')
+        if self.posicion_veneno == nueva_cabeza:
+            self.posicion_veneno = self._obtener_posicion_libre()
+        if getattr(self, 'veneno_mata', False):
+            self.juego_terminado = True
+
+>>>>>> Nubes Obstáculo fijas con penalización severa y desvío determinista:
+Archivo modificado: engine/snake.py (metodos dibujar_nube_celda, _redirigir_tras_choque)
+
+Las nubes se dibujan en gris claro (#A9A9A9) para diferenciarlas. Al chocar sin invulnerabilidad:
+si el jugador tiene 0 puntos muere inmediatamente; si tiene puntos, los drena a 0 (RESET_SCORE) y se
+redirige en orden fijo determinista (derecha, abajo, izquierda, arriba) para no atravesar su cuerpo:
+
+elif hasattr(self, 'nubes') and nueva_cabeza in self.nubes:
+    if es_invulnerable:
+        self.nubes.remove(nueva_cabeza)
+        self.snake_spawn_nube()
+    else:
+        if self.puntuacion == 0:
+            self.juego_terminado = True
+            return
+        self.puntuacion = 0
+        self.ejecutar_evento('ON_COLLISION_CLOUD')
+        nueva_cabeza = self._redirigir_tras_choque()
+        if nueva_cabeza is None:
+            self.juego_terminado = True
+            return
+
+>>>>>> Power-Up "No Morir" con duración cronometrada y cooldown de reaparición:
+Archivos modificados: games/snake_remake.brick, engine/snake.py
+
+Se implementa una baya amarilla que otorga invulnerabilidad durante n segundos reales. Para evitar
+cadenas infinitas de invulnerabilidad, se incorporó un cooldown de 5.0 segundos antes de reaparecer:
+
+elif hasattr(self, 'posicion_powerup') and nueva_cabeza == self.posicion_powerup:
+    pos_anterior = self.posicion_powerup
+    self.ejecutar_evento('ON_EAT_POWERUP')
+    if getattr(self, 'duracion_inv_config', 0) > 0:
+        self.posicion_powerup = None
+        self.cooldown_powerup = 5.0  # Cooldown de 5 segundos
+    elif self.posicion_powerup == pos_anterior:
+        self.posicion_powerup = self._obtener_posicion_libre()
+
+Durante la invulnerabilidad, la serpiente envuelve paredes (wrap-around), atraviesa su propio cuerpo y
+despeja nubes y veneno sin sufrir daño. La cabeza parpadea en amarillo acelerando su frecuencia conforme expira.
+
+------------------------------ 5. ESTÉTICA AVANZADA Y ANIMACIÓN DEL NIVEL NYAN CAT ------------------------------
+
+>>>>>> Cabeza circular de alto contraste con rasgos felinos:
+Archivo modificado: engine/snake.py (metodo dibujar_cabeza_nyan)
+
+La cabeza de Nyan Cat se renderiza en blanco puro (#FFFFFF) para contrastar contra el fondo negro (#111111)
+y la cola arcoíris. Cuenta con orejas triangulares externas e internas rosadas (create_polygon), base circular
+(create_oval), mejillas rosadas (#FFAAA6), ojos negros con reflejo blanco y hocico (create_rectangle):
+
+def dibujar_cabeza_nyan(self, x, y, color, direccion=(1, 0)):
+    # Orejas poligonales exteriores (color) e interiores (#FFAAA6)
+    poligono([(-0.38, -0.12), (-0.32, -0.46), (-0.06, -0.28)], color)
+    poligono([(-0.32, -0.18), (-0.28, -0.38), (-0.12, -0.26)], "#FFAAA6")
+    # Base circular (1 solo create_oval que preserva tests de tk_falso)
+    self.dibujar_circulo_celda(x, y, color)
+    # Facciones rectangulares (mejillas, ojos, brillos y nariz)
+    rect(-0.28, 0.14, 0.07, 0.07, "#FFAAA6")
+    rect(-0.16, -0.04, 0.08, 0.09, "#000000")
+    rect(-0.18, -0.07, 0.03, 0.03, "#FFFFFF")
+    rect(0.0, 0.08, 0.04, 0.03, "#000000")
+
+>>>>>> Orientación 2D dinámica de la cabeza según el vector de movimiento:
+Archivo modificado: engine/snake.py (metodo _rotar_coord_celda)
+
+Se implementó una transformación de coordenadas de rotación 2D en base a self.serpiente_direccion. Al
+moverse hacia UP, DOWN, LEFT o RIGHT, las orejas, ojos, brillos, mejillas y nariz rotan geométricamente
+haciendo que el gato mire hacia el frente de su avance:
+
+def _rotar_coord_celda(self, cx, cy, c, u, v, direccion):
+    dx, dy = direccion
+    if dx > 0:      # DERECHA (+90 deg)
+        return (cx - v * c, cy + u * c)
+    elif dx < 0:    # IZQUIERDA (-90 deg)
+        return (cx + v * c, cy - u * c)
+    elif dy > 0:    # ABAJO (180 deg)
+        return (cx - u * c, cy - v * c)
+    else:           # ARRIBA (0 deg)
+        return (cx + u * c, cy + v * c)
+
+>>>>>> Animación continua de la cola arcoíris (flujo por frames):
+Archivo modificado: engine/snake.py (lineas 12-13, 317-320)
+
+La estela multicolor utiliza la paleta hexadecimal fija y cicla por segmentos con el operador módulo.
+Para que los colores ondulen y fluyan hacia la cola en tiempo de ejecución, se incorporó un desfase
+temporal sincronizado con el contador de cuadros a velocidad moderada (cada 3 frames):
+
+COLORES_NYAN = ["#FF0000", "#FF7F00", "#00FF00", "#0000FF", "#AA00FF"]
+FRAMES_POR_PASO_NYAN = 3
+
+offset = (self.frame_counter - 1) // FRAMES_POR_PASO_NYAN
+color = COLORES_NYAN[(i - 1 - offset) % len(COLORES_NYAN)]
+
+------------------------------ 6. MECÁNICAS DE COLISIÓN Y ESCUDO DE PUNTOS ------------------------------
+
+>>>>>> Mecánica de Escudo de Puntos en el nivel Nyan Cat:
+Archivo modificado: engine/snake.py (snake_mover_jugador, lineas 500-555)
+
+En snake.brick, chocar contra una pared o el propio cuerpo causaba Game Over inmediato. En Nyan Cat, los
+puntos acumulados actúan como escudo amortiguador: al chocar, el puntaje se drena a 0 pero la serpiente
+sobrevive (envolviendo el mapa por la pared o desviándose del cuerpo). Solo si los puntos ya eran 0 ocurre Game Over:
+
+# Colisión con Pared:
+if not self._dentro_del_tablero(nueva_cabeza):
+    if es_invulnerable:
+        nueva_cabeza = (nueva_cabeza[0] % self.ancho, nueva_cabeza[1] % self.alto)
+    elif es_nyan_cat and self.puntuacion > 0:
+        self.puntuacion = 0
+        nueva_cabeza = (nueva_cabeza[0] % self.ancho, nueva_cabeza[1] % self.alto)
+    else:
+        self.ejecutar_evento('ON_COLLISION_WALL')
+        return
+
+# Auto-Colisión (Cuerpo):
+if nueva_cabeza in cuerpo_solido and not es_invulnerable:
+    if es_nyan_cat and self.puntuacion > 0:
+        self.puntuacion = 0
+        desvio = self._redirigir_tras_choque()
+        if desvio is not None:
+            nueva_cabeza = desvio
+    else:
+        self.ejecutar_evento('ON_COLLISION_SELF')
+        return
+
+------------------------------ 7. BANDA SONORA POLIFÓNICA Y EFECTOS SINTETIZADOS ------------------------------
+
+>>>>>> Música interactiva por nivel y tema polifónico de Nyan Cat:
+Archivos modificados: games/snake_remake.brick, engine/audio.py, engine/tracker.py
+
+Cada nivel reproduce su propia composición musical. Se diseñó el tema original TEMA_NYAN en onda cuadrada
+(WAVE SQUARE) con 2 voces independientes sintetizadas (lead melódico + bajo/arpegio):
+
+DEFINE SONG TEMA_NYAN WAVE SQUARE:
+  VOICE 1:
+    NOTE C5 200
+    NOTE E5 200
+    ...
+  END
+  VOICE 2:
+    NOTE C3 200
+    NOTE E3 200
+    ...
+  END
+END
+
+El archivo de audio PCM se encuentra protegido con verificación por huella MD5 de referencia
+(b5c00a9d824a221678215ea6ca64c173) en tests/test_compiler.py.
+
+>>>>>> Efectos de sonido integrados en eventos del juego:
+Archivo modificado: games/snake_remake.brick (lineas 166-191)
+
+Se definieron efectos sintetizados disparados mediante PLAY_EFFECT:
+- COMER (al recolectar fruta normal).
+- VENENO (al consumir baya venenosa).
+- POWERUP_FX (al activar la invulnerabilidad).
+- MORIR (secuencia de Game Over).
+
+------------------------------ 8. LIMPIEZA DE CÓDIGO Y RETROCOMPATIBILIDAD ------------------------------
+
+>>>>>> Eliminación de métodos duplicados muertos en engine/snake.py:
+Archivo modificado: engine/snake.py
+
+Se eliminó el bloque redundante inicial (antiguas líneas 31 a 74) que contenía definiciones muertas de
+inicializar_estado, iniciar_partida y generar_elementos_por_nivel, conservando únicamente las definiciones
+activas completas que gestionan self.cooldown_powerup.
+
+>>>>>> Retrocompatibilidad obligatoria con juegos clásicos:
+Archivos garantizados: games/snake.brick, games/tetris.brick, compiler.py, engine/game.py
+
+Los juegos originales (.brick clásicos) no contienen el bloque LEVELS ni formas especiales. El compilador
+y la clase base Game aplican automáticamente el fallback al nivel por defecto 'BABY' (TICK 0.15, sin menú
+y sin modificadores invasivos), permitiendo que snake.brick original continúe compilando y ejecutándose
+de forma idéntica a su versión base.
