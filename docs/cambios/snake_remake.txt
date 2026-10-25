@@ -1,22 +1,7 @@
 ---------------------------------------  CAMBIOS CON RESPECTO A SNAKE.BRICK ---------------------------------------
 
-RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 4)
-- Miguel Angel Echeverri Isaza (motor gráfico, estética y colisiones): renderizado de geometrías
-  (círculos y triángulos orientados), cabeza de Nyan Cat (blanca de alto contraste con rasgos y
-  orientación 2D dinámica), estela arcoíris animada cuadro a cuadro, y mecánicas de colisión y
-  escudo de puntos en Nyan Cat.
+RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 4):
 
-- Tomas Lujan Colorado (lenguaje, compilador y toolchain): extensiones a snake.bnf (bloque LEVELS,
-  GEOMETRY, modales de veneno/nubes/powerup, reales y booleanos), actualización del parser y lexer en
-  compiler.py, y redacción/estructuración de este changelog.
-
-- Nixon Daniel Lizcano Santana (arquitectura, niveles y robustecimiento): menú de selección de niveles
-  en engine/game.py, desacople de eventos globales hacia perfiles por nivel, temporizadores de invulnerabilidad
-  y cooldown del power-up en engine/snake.py, y suites de tests unitarios en Python 2.7.
-
-- Andrés Felipe Bustamante López (audio sintetizado, balance y obstáculos): composición del tema polifónico
-  TEMA_NYAN de 2 voces en onda cuadrada con verificación de MD5, efectos de sonido (COMER, VENENO,
-  POWERUP_FX, MORIR), balance de ticks y diseño de nubes obstáculo y bayas venenosas.
 
 ------------------------------ 1. MODIFICACIONES EN EL LENGUAJE DSL Y GRAMÁTICA ------------------------------
 
