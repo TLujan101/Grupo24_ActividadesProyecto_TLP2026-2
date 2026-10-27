@@ -69,7 +69,7 @@ class TestJuegosReales(unittest.TestCase):
         # no hace esto.
         random.seed(1234)
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
-        self.assertEqual(datos_juego['config']['start_level'], 'NYAN_CAT')
+        self.assertEqual(datos_juego['config']['start_level'], 'BABY')
         self.assertEqual([n['nombre'] for n in datos_juego['levels']],
                          ['BABY', 'ENTUSIASTA', 'NYAN_CAT'])
 
@@ -83,7 +83,7 @@ class TestJuegosReales(unittest.TestCase):
         juego.botones_nivel[1].opciones['command']()  # clic en Entusiasta
         self.assertTrue(juego.iniciado)
         self.assertEqual(juego.nivel_actual, 'ENTUSIASTA')
-        self.assertEqual(juego.velocidad_gravedad, 0.1)
+        self.assertEqual(juego.velocidad_gravedad, 0.12)
         self.assertEqual(len(juego.serpiente_cuerpo), 1)   # ON_START corrio
         self.assertIsNotNone(juego.posicion_comida)
 
@@ -91,6 +91,20 @@ class TestJuegosReales(unittest.TestCase):
         for _ in range(30):
             juego.manejar_tecla(random.choice(['UP', 'DOWN', 'LEFT', 'RIGHT']))
             juego.game_loop()
+
+    def test_powerup_solo_da_invulnerabilidad(self):
+        # El power-up no da puntos ni alarga: solo invulnerabilidad.
+        datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
+        verbos = [a['accion'] for a in datos_juego['events']['ON_EAT_POWERUP']]
+        self.assertIn('GRANT_INVULNERABILITY', verbos)
+        self.assertNotIn('GROW', verbos)
+        self.assertNotIn('INCREASE_SCORE', verbos)
+        # Nyan Cat es la dificultad maxima: su power-up dura menos.
+        duraciones = dict((n['nombre'], n.get('invulnerability_duration'))
+                          for n in datos_juego['levels'])
+        self.assertEqual(duraciones['ENTUSIASTA'], 7)
+        self.assertEqual(duraciones['NYAN_CAT'], 5)
+        self.assertLess(duraciones['NYAN_CAT'], duraciones['ENTUSIASTA'])
 
     def test_snake_remake_tiene_musica_por_nivel_y_efectos(self):
         from engine import tracker
@@ -103,7 +117,9 @@ class TestJuegosReales(unittest.TestCase):
         self.assertEqual(sorted(musicas), ['TEMA_CALMO', 'TEMA_ENTUSIASTA', 'TEMA_NYAN'])
         for nombre in musicas:
             self.assertIn(nombre, datos_juego['songs'])
-            self.assertTrue(datos_juego['songs'][nombre]['notas'])
+            cancion = datos_juego['songs'][nombre]
+            # Una cancion puede ir en una sola voz (notas) o en varias (voces).
+            self.assertTrue(cancion.get('notas') or cancion.get('voces'))
 
         # Efectos de comer y de morir.
         self.assertIn('COMER', datos_juego['effects'])
@@ -125,23 +141,23 @@ class TestJuegosReales(unittest.TestCase):
         self.assertEqual(juego.audio.llamadas, [('efecto',)])
         self.assertEqual(juego.audio.musica_actual, esperado)
 
-    def test_tema_nyan_sintetiza_la_melodia_completa(self):
-        # 12 compases de 26 slots a 90 ms: 28.08 s de melodia de una sola voz.
-        # Empieza con 600 ms de entrada y cierra con 1500 ms de salida.
+    def test_tema_nyan_sintetiza_el_pcm_esperado(self):
+        # 6 compases de 4/4 a 150 BPM: 48 corcheas de 200 ms = 9.6 s, dos voces
+        # (lead + arpegio) que el sintetizador mezcla y normaliza.
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
         cancion = datos_juego['songs']['TEMA_NYAN']
-        self.assertNotIn('voces', cancion)
-        self.assertEqual(sum(ms for _, ms in cancion['notas']), 28080)
-        pcm = tracker.cancion_pcm('TEMA_NYAN', cancion['notas'], cancion['wave'])
+        pcm = tracker.cancion_pcm_voces('TEMA_NYAN', cancion['voces'], cancion['wave'])
         muestras = array.array('h')
         muestras.fromstring(pcm)
-        # La longitud exacta depende del truncado por nota en _render_voz;
-        # se espera igual a la suma de las muestras que genera cada nota.
-        esperado = sum(max(1, int(tracker.FPS * ms / 1000.0)) for _, ms in cancion['notas'])
+        # La mezcla se alinea por el principio: mide como la voz mas larga.
+        esperado = max(sum(max(1, int(tracker.FPS * ms / 1000.0)) for _, ms in voz)
+                        for voz in cancion['voces'])
         self.assertEqual(len(muestras), esperado)
         self.assertTrue(any(m != 0 for m in muestras))
-        self.assertTrue(all(m == 0 for m in muestras[:int(tracker.FPS * 0.6)]))
-        self.assertTrue(all(m == 0 for m in muestras[-int(tracker.FPS * 1.5):]))
+        # Test dorado: la cancion no cambia sin querer (mismo patron que Tetris).
+        # El md5 es el del preview que se escucho antes de fijarlo.
+        self.assertEqual(hashlib.md5(pcm).hexdigest(),
+                         'b5c00a9d824a221678215ea6ca64c173')
 
     def test_tema_tetris_pcm_identico_byte_a_byte(self):
         # Test dorado: el camino senoidal no se puede mover sin que este test

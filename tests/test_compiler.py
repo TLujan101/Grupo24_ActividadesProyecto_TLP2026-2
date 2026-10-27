@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # Tests del compilador: el lexer y el parser de BrickScript.
 
-import json
 import os
 import unittest
 
@@ -148,19 +147,33 @@ def compilar(fuente):
 
 class TestTemaNyan(unittest.TestCase):
 
-    def test_tema_nyan_es_la_melodia_fiel_de_una_voz(self):
-        # La referencia es la mano derecha publicada: 12 compases de 26 slots.
-        # El Plan A es melodico: TEMA_NYAN no lleva bajo ni bloques VOICE.
+    def compilar_remake(self):
         raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(raiz, 'tests', 'fixtures', 'nyan_melodia.json')) as f:
-            esperadas = json.load(f)['notas']
         with open(os.path.join(raiz, 'games', 'snake_remake.brick')) as f:
-            ast = compilar(f.read())
-        cancion = ast['songs']['TEMA_NYAN']
+            return compilar(f.read())
+
+    def test_tema_nyan_es_un_tema_propio_de_dos_voces(self):
+        # TEMA_NYAN ya no es la transcripcion del tema publicado: es un tema
+        # propio (lead + arpegio) en dos voces, con onda cuadrada.
+        cancion = self.compilar_remake()['songs']['TEMA_NYAN']
         self.assertEqual(cancion['wave'], 'SQUARE')
-        self.assertNotIn('voces', cancion)
-        self.assertEqual(cancion['notas'], esperadas)
-        self.assertEqual(sum(ms for _, ms in esperadas), 12 * 26 * 90)
+        self.assertNotIn('notas', cancion)
+        self.assertEqual(len(cancion['voces']), 2)
+
+    def test_las_dos_voces_duran_lo_mismo(self):
+        # Si el lead y el arpegio no miden lo mismo, suenan desfasados.
+        cancion = self.compilar_remake()['songs']['TEMA_NYAN']
+        for voz in cancion['voces']:
+            self.assertEqual(len(voz), 48, '6 compases de 4/4 en corcheas')
+            self.assertEqual(sum(ms for _, ms in voz), 9600, '48 corcheas de 200 ms')
+
+    def test_el_tema_nyan_no_silencia_la_partida(self):
+        # Ninguna voz puede tener un silencio largo: el loop sonaria roto.
+        cancion = self.compilar_remake()['songs']['TEMA_NYAN']
+        for voz in cancion['voces']:
+            for frec, ms in voz:
+                if frec == 0.0:
+                    self.assertLessEqual(ms, 200, 'silencio mas largo que un slot')
 
 
 class TestParserNiveles(unittest.TestCase):
@@ -188,6 +201,22 @@ class TestParserNiveles(unittest.TestCase):
     def test_nivel_sin_modificadores(self):
         ast = compilar('LEVELS:\n  LEVEL BABY:\n  END\nEND\n')
         self.assertEqual(ast['levels'], [{'nombre': 'BABY'}])
+
+    def test_modificador_poison_kills(self):
+        # POISON_KILLS decide en cada nivel si comer veneno termina la partida
+        ast = compilar('LEVELS:\n  LEVEL NYAN_CAT:\n    POISON_KILLS TRUE\n  END\nEND\n')
+        self.assertIs(ast['levels'][0]['poison_kills'], True)
+        ast = compilar('LEVELS:\n  LEVEL NYAN_CAT:\n    POISON_KILLS FALSE\n  END\nEND\n')
+        self.assertIs(ast['levels'][0]['poison_kills'], False)
+
+    def test_brick_remake_pone_poison_kills_solo_en_nyan_cat(self):
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(raiz, 'games', 'snake_remake.brick')) as f:
+            ast = compilar(f.read())
+        niveles = dict((n['nombre'], n) for n in ast['levels'])
+        self.assertIs(niveles['NYAN_CAT']['poison_kills'], True)
+        self.assertNotIn('poison_kills', niveles['BABY'])
+        self.assertNotIn('poison_kills', niveles['ENTUSIASTA'])
 
     def test_el_bloque_va_en_cualquier_posicion(self):
         # El parser es un despachador de tokens: el bloque no depende del orden
@@ -247,7 +276,7 @@ class TestParserNiveles(unittest.TestCase):
     def test_music_exige_nombre(self):
         with self.assertRaises(Exception) as contexto:
             compilar('LEVELS:\n  LEVEL BABY:\n    MUSIC\n  END\nEND\n')
-        self.assertIn("se esperaba el nombre de la cancion", str(contexto.exception))
+        self.assertIn("se esperaba el valor o nombre del modificador", str(contexto.exception))
 
     def test_music_debe_nombrar_una_cancion_declarada(self):
         # El motor tolera un nombre inexistente (suena mudo), pero aqui se

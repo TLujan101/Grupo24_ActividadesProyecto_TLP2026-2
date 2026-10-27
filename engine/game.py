@@ -13,7 +13,7 @@
 #   - color_celda_grid(x, y): (opcional) color de una celda fija.
 
 import sys
-import Tkinter as tk
+import Tkinter as tk #type:  ignore
 
 from . import tracker
 from .audio import GestorAudioNativo
@@ -148,6 +148,41 @@ class Game(object):
         # Con un solo nivel no hay nada que elegir: el .brick no declaro
         # LEVELS y el juego arranca directo, como antes.
         return len(self.niveles) > 1
+    
+    def ejecutar_evento(self, nombre_evento):
+        # Verifica si el evento existe en el diccionario de eventos del juego
+        events = getattr(self, 'datos_juego', {}).get('events', {})
+        if nombre_evento in events:
+            for accion in events[nombre_evento]:
+                verbo = accion.get('accion')
+                objeto = accion.get('objeto')
+                
+                if verbo == 'INCREASE_SCORE':
+                    try:
+                        self.puntuacion += int(objeto)
+                    except (ValueError, TypeError):
+                        pass
+                elif verbo == 'DECREASE_SCORE':
+                    try:
+                        self.puntuacion = max(0, self.puntuacion - int(objeto))
+                    except (ValueError, TypeError):
+                        pass
+                elif verbo == 'RESET_SCORE':
+                    self.puntuacion = 0
+                elif verbo == 'GAME_OVER':
+                    self.juego_terminado = True
+
+                # Audio
+                if verbo == 'PLAY_MUSIC': 
+                    self.musica_brick(objeto)
+                elif verbo == 'PLAY_EFFECT': 
+                    self.efecto_brick(objeto)
+                elif verbo == 'STOP_MUSIC': 
+                    if hasattr(self, 'audio'):
+                        self.audio.detener_musica()
+
+                # Ejecutar acciones específicas del juego (Snake)
+                self.ejecutar_accion(verbo, objeto, accion)
 
     def aplicar_nivel(self):
         # Cada juego dejo su default en inicializar_estado(); el nivel lo pisa
@@ -338,26 +373,6 @@ class Game(object):
         # Las flechas disparan ON_KEY_*; cada juego decide la accion.
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
-
-    def ejecutar_evento(self, nombre_evento):
-        if nombre_evento in self.datos_juego['events']:
-            for accion in self.datos_juego['events'][nombre_evento]:
-                verbo, objeto = accion.get('accion'), accion.get('objeto')
-
-                if verbo == 'INCREASE_SCORE':
-                    try:
-                        self.puntuacion += int(objeto)
-                    except (ValueError, TypeError):
-                        pass
-                if verbo == 'GAME_OVER': self.juego_terminado = True
-
-                # Audio declarado en el .brick
-                if verbo == 'PLAY_MUSIC': self.musica_brick(objeto)
-                if verbo == 'PLAY_EFFECT': self.efecto_brick(objeto)
-                if verbo == 'STOP_MUSIC': self.audio.detener_musica()
-
-                # Acciones propias de cada juego
-                self.ejecutar_accion(verbo, objeto, accion)
 
 
     # DIBUJO

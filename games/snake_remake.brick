@@ -1,21 +1,34 @@
 # snake_remake.brick
 # Actividad 4 - Seccion C: niveles de dificultad desde la gramatica.
-# Los tres niveles se diferencian en la velocidad del tick y en el tema que
-# suena. Las frutas venenosas, las nubes y la geometria llegan en B y A.
+# Versión completa con formas geométricas, frutas venenosas, nubes y power-ups.
 GAME_TYPE SNAKE
 
 GAME_GRID (18, 18)
 
-# --- Definicion de Elementos ---
-DEFINE SHAPE PIXEL:
+# --- Definicion de Elementos y Geometria ---
+# Segmento con forma circular para niveles estándar o entusiastas
+DEFINE SHAPE CUERPO_CIRCULAR GEOMETRY CIRCLE COLOR BLUE:
   STATE 1:
     [1]
+  END
+END
+
+# Segmento con forma triangular
+DEFINE SHAPE CUERPO_TRIANGULAR GEOMETRY TRIANGLE COLOR GREEN:
+  STATE 1:
+    [1]
+  END
+END
+
+# Cabeza especial para el nivel Nyan Cat (geometría de gato/círculo)
+DEFINE SHAPE CABEZA_NYAN GEOMETRY NYAN_CAT COLOR PURPLE:
+  STATE 1:
+    [1, 1]
+    [1, 1]
+  END
 END
 
 # --- Canciones ---
-# Cada nota lleva nombre (E5) y duracion en ms. El motor las sintetiza: no hay
-# ningun archivo de audio, la musica es codigo.
-
 # Tema de Baby: lento y espacioso, registro grave.
 DEFINE SONG TEMA_CALMO:
   NOTE C4 800
@@ -44,32 +57,128 @@ DEFINE SONG TEMA_ENTUSIASTA:
   NOTE C4 600
 END
 
-DEFINE SONG TEMA_NYAN
-  WAVE SQUARE:
-    NOTE D#5 107
-    NOTE E5 107
-    NOTE F#5 107
-    NOTE REST 107
-    NOTE B5 107
-    NOTE E5 107
-    NOTE D#5 107
-    NOTE E5 107
-    NOTE F#5 107
-    NOTE B5 107
-    NOTE D6 107
-    NOTE E6 107
-    NOTE D#6 107
-    NOTE A#5 107
-    NOTE B5 107
-    NOTE REST 107
+# Tema Nyan Cat: tema propio de dos voces (lead + arpegio) en onda cuadrada.
+# 6 compases de 4/4 a 150 BPM (corchea de 200 ms) = 9.6 s de loop.
+# Progresion: C - Am - F - G - C - G7>C. Termina resolviendo en Do.
+DEFINE SONG TEMA_NYAN WAVE SQUARE:
+  VOICE 1:
+    NOTE C5 200
+    NOTE E5 200
+    NOTE G5 200
+    NOTE C6 200
+    NOTE B5 200
+    NOTE G5 200
+    NOTE E5 200
+    NOTE C5 200
+    NOTE A4 200
+    NOTE C5 200
+    NOTE E5 200
+    NOTE A5 200
+    NOTE G5 200
+    NOTE E5 200
+    NOTE C5 200
+    NOTE REST 200
+    NOTE F4 200
+    NOTE A4 200
+    NOTE C5 200
+    NOTE F5 200
+    NOTE E5 200
+    NOTE C5 200
+    NOTE A4 200
+    NOTE F4 200
+    NOTE G4 200
+    NOTE B4 200
+    NOTE D5 200
+    NOTE G5 200
+    NOTE F#5 200
+    NOTE D5 200
+    NOTE B4 200
+    NOTE REST 200
+    NOTE C5 200
+    NOTE E5 200
+    NOTE G5 200
+    NOTE C6 200
+    NOTE E6 200
+    NOTE D6 200
+    NOTE C6 200
+    NOTE G5 200
+    NOTE B4 200
+    NOTE D5 200
+    NOTE F#5 200
+    NOTE B5 200
+    NOTE A5 200
+    NOTE G5 200
+    NOTE E5 200
+    NOTE D5 200
+  END
+  VOICE 2:
+    NOTE C3 200
+    NOTE E3 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE F2 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE A2 200
+    NOTE C3 200
+    NOTE A2 200
+    NOTE F2 200
+    NOTE A2 200
+    NOTE G2 200
+    NOTE B2 200
+    NOTE D3 200
+    NOTE B2 200
+    NOTE D3 200
+    NOTE B2 200
+    NOTE G2 200
+    NOTE B2 200
+    NOTE C3 200
+    NOTE E3 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE C4 200
+    NOTE G3 200
+    NOTE E3 200
+    NOTE C3 200
+    NOTE G2 200
+    NOTE B2 200
+    NOTE D3 200
+    NOTE F3 200
+    NOTE E3 200
+    NOTE D3 200
+    NOTE C3 200
+    NOTE B2 200
+  END
 END
 
 # --- Efectos ---
-# Un efecto suena una vez y NUNCA corta la musica de fondo.
 DEFINE EFFECT COMER:
   NOTE C6 60
   NOTE E6 60
   NOTE G6 120
+END
+
+DEFINE EFFECT VENENO:
+  NOTE A3 100
+  NOTE F3 150
+END
+
+DEFINE EFFECT POWERUP_FX:
+  NOTE G5 100
+  NOTE B5 100
+  NOTE D6 200
 END
 
 DEFINE EFFECT MORIR:
@@ -82,40 +191,44 @@ DEFINE EFFECT MORIR:
 END
 
 # --- Niveles ---
-# START fija el nivel con el que arranca si el jugador no elige otro. El motor
-# no sabe que existe un nivel llamado NYAN_CAT: solo obedece lo que este bloque
-# declara. En pantalla se muestran como '1. Baby', '2. Entusiasta' y
-# '3. Nyan Cat', y se pueden elegir con clic o con las teclas 1, 2 y 3.
+# Nubes: solo Nyan Cat (el enunciado).
 LEVELS:
-  START: NYAN_CAT
+  START: BABY
   LEVEL BABY:
-    TICK 0.15
     MUSIC TEMA_CALMO
+    TICK 0.18
+    GEOMETRY RECT
+    CLOUDS_COUNT 0
   END
   LEVEL ENTUSIASTA:
-    TICK 0.10
     MUSIC TEMA_ENTUSIASTA
+    TICK 0.12
+    GEOMETRY TRIANGLE
+    POISON_ENABLED TRUE
+    INVULNERABILITY_DURATION 7
+    CLOUDS_COUNT 0
   END
   LEVEL NYAN_CAT:
-    TICK 0.06
     MUSIC TEMA_NYAN
+    TICK 0.06
+    GEOMETRY NYAN_CAT
+    POISON_ENABLED TRUE
+    POISON_KILLS TRUE
+    INVULNERABILITY_DURATION 5
+    CLOUDS_COUNT 4
   END
 END
 
 # --- Logica y Reglas ---
-# La musica NO se pide aqui: la pide el nivel. Si se añadiera un PLAY_MUSIC en
-# este evento, mandaria sobre el tema del nivel.
 ON START:
   SPAWN PLAYER AT (9, 9)
   SPAWN FOOD AT RANDOM
 END
 
-# ON_TICK es un evento que se ejecuta en cada ciclo del juego
 ON TICK:
   MOVE PLAYER FORWARD
 END
 
-# Evento para cuando la serpiente come
 ON EAT_FOOD:
   INCREASE_SCORE 10
   GROW PLAYER 1
@@ -123,19 +236,31 @@ ON EAT_FOOD:
   SPAWN FOOD AT RANDOM
 END
 
-# El motor emite ON GAME_OVER una sola vez, tanto si choca con la pared como
-# si se come a si misma: por eso el efecto de morir va aqui y no duplicado en
-# los dos eventos de colision.
+ON EAT_POISON:
+  DECREASE_SCORE 5
+  PLAY_EFFECT VENENO
+  SPAWN POISON AT RANDOM
+END
+
+ON EAT_POWERUP:
+  GRANT_INVULNERABILITY 7
+  PLAY_EFFECT POWERUP_FX
+END
+
 ON GAME_OVER:
   PLAY_EFFECT MORIR
 END
 
-# Eventos de fin de juego
 ON COLLISION_WALL:
   GAME_OVER
 END
+
 ON COLLISION_SELF:
   GAME_OVER
+END
+
+ON COLLISION_CLOUD:
+  RESET_SCORE
 END
 
 # --- Controles ---

@@ -759,6 +759,11 @@ El Plan A es melódico: `TEMA_NYAN` lleva solo la mano derecha, en una sola
 voz y sin bloques `VOICE`. El bajo publicado existe, pero sonaría a la vez
 que la melodía y eso exige polifonía, que es otro plan.
 
+> Esto describe la **transcripción de referencia** (el tema publicado, 12
+> compases de 26 slots), que quedó archivada en `tests/fixtures/nyan_melodia.json`
+> como documento de trabajo. **El `TEMA_NYAN` que suena en el juego ya no es
+> esa transcripción**: desde la sección 15 es un tema propio de dos voces.
+
 ### Los dos botones que controlan todo
 
 Una vez leída la rejilla, la melodía entera se controla con dos números:
@@ -769,6 +774,63 @@ Una vez leída la rejilla, la melodía entera se controla con dos números:
 | la octava fija | dónde cae la línea melódica. La mano derecha va en octava 5 |
 
 Cambiar el tempo es cambiar un número, ni una nota.
+
+---
+
+## 15. `TEMA_NYAN`: un tema propio de dos voces
+
+La transcripción fiel sonaba a otra cosa: una sola mano derecha, sin bajo y
+sin acompañamiento, en 28 s. Para el nivel Nyan Cat —el más rápido del juego,
+con tick de 0.06 s— faltaba el golpe que hace que un chiptune funcione: el
+**acompañamiento en la otra mano**.
+
+### Cómo se compuso
+
+Dos voces, misma rejilla, mismo tempo. La unidad es la **corchea de 200 ms**
+(negra de 400 ms = 150 BPM) y el tema son **6 compases de 4/4**: 48 slots por
+voz, 9.6 s de loop.
+
+| Compás | Acorde | Lead (voz 1) | Arpegio (voz 2) |
+|---|---|---|---|
+| 1 | C | `C5 E5 G5 C6 · B5 G5 E5 C5` | `C3 E3 G3 E3 · G3 E3 C3 E3` |
+| 2 | Am | `A4 C5 E5 A5 · G5 E5 C5 —` | `A2 C3 E3 C3 · E3 C3 A2 C3` |
+| 3 | F | `F4 A4 C5 F5 · E5 C5 A4 F4` | `F2 A2 C3 A2 · C3 A2 F2 A2` |
+| 4 | G | `G4 B4 D5 G5 · F#5 D5 B4 —` | `G2 B2 D3 B2 · D3 B2 G2 B2` |
+| 5 | C | `C5 E5 G5 C6 · E6 D6 C6 G5` | `C3 E3 G3 E3 · C4 G3 E3 C3` |
+| 6 | G7 | `B4 D5 F#5 B5 · A5 G5 E5 D5` | `G2 B2 D3 F3 · E3 D3 C3 B2` |
+
+Tres decisiones que hacen que funcione:
+
+- **El arpegio no improvisa**: repite el arpegio del acorde en la octava 3,
+  corchea a corchea. Es lo que le da al tema el pulso de abajo.
+- **El lead descansa dos veces** (compases 2 y 4). Sin esos huecos la melodía
+  es una pared de notas y el oído se cansa antes del segundo loop.
+- **El compás 6 se queda en dominante y la resolución cae en el empalme.**
+  El motor repite la canción solo, así que la última nota y la primera se
+  escuchan pegadas: si el tema cerrara en Do *dentro* del compás 6, el loop
+  empezaría con `C5 | C5` y `C3 C3 | C3` (dos y tres notas repetidas: un
+  tropezón). Dejando el compás 6 en G7, el empalme resuelve con movimiento
+  contrario: el lead baja de `D5` a `C5` y el bajo sube de `B2` a `C3`, que
+  es justo la sensible resolviendo a la tónica.
+
+En el `.brick` cada voz es un bloque `VOICE` con 48 `NOTE`, y la onda es de la
+canción entera (`WAVE SQUARE`), así que las dos manos suenan cuadradas. El
+sintetizador las suma muestra a muestra y normaliza el pico: el bajo y el lead
+compiten por el mismo volumen y por eso hay que dejarles espacio.
+
+### El tema queda congelado
+
+Al ser una composición —y no una transcripción— no hay una fuente externa que
+la compare: el `.brick` es la fuente. Para que nadie la cambie por descuido,
+`test_tema_nyan_sintetiza_el_pcm_esperado` fija el **md5 del PCM**
+(`b5c00a9d824a221678215ea6ca64c173`), el mismo patrón que el test dorado del
+tema de Tetris. El md5 se calculó sobre el WAV de preview que se escuchó
+**antes** de fijarlo: si algún día cambia, es a propósito.
+
+Los tests de estructura (`tests/test_compiler.py`) comprueban además que las
+dos voces duran lo mismo (9 600 ms, 48 slots cada una) y que ninguna tiene un
+silencio más largo que un slot: si el lead y el arpegio se desfasan o el loop
+se queda en silencio, el test lo dice.
 
 ---
 
