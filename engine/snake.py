@@ -30,9 +30,6 @@ class Snake(Game):
             self.veneno_mata = bool(nivel_data.get('poison_kills', False))
             self.cantidad_nubes = int(nivel_data.get('clouds_count', 0))
 
-            # Generar los elementos del nivel inmediatamente al cargarlo
-            self.generar_elementos_por_nivel()
-
     def snake_spawn_nube(self, accion=None):
         params = (accion or {}).get('params', [])
         if params and params[0] != 'RANDOM':
@@ -61,37 +58,12 @@ class Snake(Game):
         if pos:
             self.posicion_powerup = pos
 
-    def elegir_nivel(self, nombre_nivel):
-        """Intercepta la selección de nivel y extrae todos sus parámetros"""
-        if hasattr(super(Snake, self), 'elegir_nivel'):
-            super(Snake, self).elegir_nivel(nombre_nivel)
-
-        self.nivel_actual = nombre_nivel
-        lvl_val = None
-
-        if hasattr(self, 'datos_juego'):
-            niveles = self.datos_juego.get('levels', [])
-
-            if isinstance(nombre_nivel, int) or (isinstance(nombre_nivel, str) and str(nombre_nivel).isdigit()):
-                idx = int(nombre_nivel)
-                if isinstance(niveles, list) and 0 <= idx < len(niveles):
-                    lvl_val = niveles[idx]
-            elif isinstance(niveles, list):
-                for l in niveles:
-                    if isinstance(l, dict):
-                        nombre_json = l.get('nombre') or l.get('name')
-                        if str(nombre_json).upper() == str(nombre_nivel).upper():
-                            lvl_val = l
-                            break
-            elif isinstance(niveles, dict):
-                for lvl_key, l in niveles.items():
-                    if str(lvl_key).upper() == str(nombre_nivel).upper():
-                        if isinstance(l, dict):
-                            lvl_val = l
-                            break
-
-        if isinstance(lvl_val, dict):
-            self.cargar_configuracion_nivel(lvl_val)
+    def aplicar_nivel(self):
+        # Game.elegir_nivel fija nivel_actual y nivel_config y llama a
+        # iniciar_partida, que llega aqui ANTES de ON_START: asi la geometria,
+        # el veneno y las nubes del nivel ya estan cargados cuando arranca.
+        super(Snake, self).aplicar_nivel()
+        self.cargar_configuracion_nivel(self.nivel_config)
 
     def ejecutar_accion(self, verbo, objeto, accion):
         if verbo == 'SPAWN':
@@ -111,14 +83,11 @@ class Snake(Game):
 
     def dibujar_circulo_celda(self, x, y, color):
         """Dibuja un círculo exacto usando el canvas y la variable correcta del motor"""
-        if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
-            x1 = x * self.taman_celda + 2
-            y1 = y * self.taman_celda + 2
-            x2 = (x + 1) * self.taman_celda - 2
-            y2 = (y + 1) * self.taman_celda - 2
-            self.canvas.create_oval(x1, y1, x2, y2, fill=color, outline="")
-        else:
-            self.dibujar_celda(x, y, color)
+        x1 = x * self.taman_celda + 2
+        y1 = y * self.taman_celda + 2
+        x2 = (x + 1) * self.taman_celda - 2
+        y2 = (y + 1) * self.taman_celda - 2
+        self.canvas.create_oval(x1, y1, x2, y2, fill=color, outline="")
 
     def dibujar_nube_celda(self, x, y, color):
         c = self.taman_celda
@@ -191,27 +160,24 @@ class Snake(Game):
 
     def dibujar_triangulo_celda(self, x, y, color, direccion=(0, -1)):
         """Dibuja un triángulo que apunta hacia donde se movió la serpiente."""
-        if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
-            c = self.taman_celda
-            x1 = x * c
-            y1 = y * c
-            x2 = x1 + c
-            y2 = y1 + c
-            m = 2
-            cx = x1 + c / 2.0
-            cy = y1 + c / 2.0
-            dx, dy = direccion
-            if dx > 0:      # derecha
-                puntos = [x2 - m, cy, x1 + m, y1 + m, x1 + m, y2 - m]
-            elif dx < 0:    # izquierda
-                puntos = [x1 + m, cy, x2 - m, y1 + m, x2 - m, y2 - m]
-            elif dy < 0:    # arriba (default)
-                puntos = [cx, y1 + m, x1 + m, y2 - m, x2 - m, y2 - m]
-            else:           # abajo
-                puntos = [cx, y2 - m, x1 + m, y1 + m, x2 - m, y1 + m]
-            self.canvas.create_polygon(puntos, fill=color, outline="")
-        else:
-            self.dibujar_celda(x, y, color)
+        c = self.taman_celda
+        x1 = x * c
+        y1 = y * c
+        x2 = x1 + c
+        y2 = y1 + c
+        m = 2
+        cx = x1 + c / 2.0
+        cy = y1 + c / 2.0
+        dx, dy = direccion
+        if dx > 0:      # derecha
+            puntos = [x2 - m, cy, x1 + m, y1 + m, x1 + m, y2 - m]
+        elif dx < 0:    # izquierda
+            puntos = [x1 + m, cy, x2 - m, y1 + m, x2 - m, y2 - m]
+        elif dy < 0:    # arriba (default)
+            puntos = [cx, y1 + m, x1 + m, y2 - m, x2 - m, y2 - m]
+        else:           # abajo
+            puntos = [cx, y2 - m, x1 + m, y1 + m, x2 - m, y1 + m]
+        self.canvas.create_polygon(puntos, fill=color, outline="")
 
     def _rotar_coord_celda(self, cx, cy, c, u, v, direccion):
         """Rota una coordenada normalizada (u, v) en [-0.5, 0.5] segun la direccion.
@@ -236,54 +202,51 @@ class Snake(Game):
         - Orejas: create_polygon orientadas hacia el frente.
         - Ojos, mejillas y nariz: create_rectangle orientados al movimiento.
         """
-        if hasattr(self, 'canvas') and hasattr(self, 'taman_celda'):
-            c = float(self.taman_celda)
-            cx = (x + 0.5) * c
-            cy = (y + 0.5) * c
-            dx, dy = direccion
+        c = float(self.taman_celda)
+        cx = (x + 0.5) * c
+        cy = (y + 0.5) * c
+        dx, dy = direccion
 
-            def P(u, v):
-                return self._rotar_coord_celda(cx, cy, c, u, v, direccion)
+        def P(u, v):
+            return self._rotar_coord_celda(cx, cy, c, u, v, direccion)
 
-            def poligono(puntos, relleno):
-                coords = []
-                for u, v in puntos:
-                    coords.extend(P(u, v))
-                self.canvas.create_polygon(coords, fill=relleno, outline="")
+        def poligono(puntos, relleno):
+            coords = []
+            for u, v in puntos:
+                coords.extend(P(u, v))
+            self.canvas.create_polygon(coords, fill=relleno, outline="")
 
-            def rect(u_c, v_c, hw, hh, relleno):
-                # hw/hh son medias medidas en ejes de la cabeza: al mirar a un
-                # lado (dx != 0) los ejes del canvas se intercambian.
-                rx, ry = P(u_c, v_c)
-                mx = (hh if dx != 0 else hw) * c
-                my = (hw if dx != 0 else hh) * c
-                self.canvas.create_rectangle(rx - mx, ry - my, rx + mx, ry + my,
-                                             fill=relleno, outline="")
+        def rect(u_c, v_c, hw, hh, relleno):
+            # hw/hh son medias medidas en ejes de la cabeza: al mirar a un
+            # lado (dx != 0) los ejes del canvas se intercambian.
+            rx, ry = P(u_c, v_c)
+            mx = (hh if dx != 0 else hw) * c
+            my = (hw if dx != 0 else hh) * c
+            self.canvas.create_rectangle(rx - mx, ry - my, rx + mx, ry + my,
+                                         fill=relleno, outline="")
 
-            # 1. Orejitas triangulares (poligonos): exterior del color de la
-            # cabeza e interior rosado, izquierda y derecha.
-            poligono([(-0.38, -0.12), (-0.32, -0.46), (-0.06, -0.28)], color)
-            poligono([(-0.32, -0.18), (-0.28, -0.38), (-0.12, -0.26)], "#FFAAA6")
-            poligono([(0.38, -0.12), (0.32, -0.46), (0.06, -0.28)], color)
-            poligono([(0.32, -0.18), (0.28, -0.38), (0.12, -0.26)], "#FFAAA6")
+        # 1. Orejitas triangulares (poligonos): exterior del color de la
+        # cabeza e interior rosado, izquierda y derecha.
+        poligono([(-0.38, -0.12), (-0.32, -0.46), (-0.06, -0.28)], color)
+        poligono([(-0.32, -0.18), (-0.28, -0.38), (-0.12, -0.26)], "#FFAAA6")
+        poligono([(0.38, -0.12), (0.32, -0.46), (0.06, -0.28)], color)
+        poligono([(0.32, -0.18), (0.28, -0.38), (0.12, -0.26)], "#FFAAA6")
 
-            # 2. Base circular de la cabeza (exactamente 1 ovalo)
-            self.dibujar_circulo_celda(x, y, color)
+        # 2. Base circular de la cabeza (exactamente 1 ovalo)
+        self.dibujar_circulo_celda(x, y, color)
 
-            # 3. Mejillas rosadas (rectangulos)
-            rect(-0.28, 0.14, 0.07, 0.07, "#FFAAA6")
-            rect(0.28, 0.14, 0.07, 0.07, "#FFAAA6")
+        # 3. Mejillas rosadas (rectangulos)
+        rect(-0.28, 0.14, 0.07, 0.07, "#FFAAA6")
+        rect(0.28, 0.14, 0.07, 0.07, "#FFAAA6")
 
-            # 4. Ojos oscuros con brillo blanco (rectangulos)
-            rect(-0.16, -0.04, 0.08, 0.09, "#000000")
-            rect(-0.18, -0.07, 0.03, 0.03, "#FFFFFF")
-            rect(0.16, -0.04, 0.08, 0.09, "#000000")
-            rect(0.14, -0.07, 0.03, 0.03, "#FFFFFF")
+        # 4. Ojos oscuros con brillo blanco (rectangulos)
+        rect(-0.16, -0.04, 0.08, 0.09, "#000000")
+        rect(-0.18, -0.07, 0.03, 0.03, "#FFFFFF")
+        rect(0.16, -0.04, 0.08, 0.09, "#000000")
+        rect(0.14, -0.07, 0.03, 0.03, "#FFFFFF")
 
-            # 5. Nariz / hocico
-            rect(0.0, 0.08, 0.04, 0.03, "#000000")
-        else:
-            self.dibujar_circulo_celda(x, y, color)
+        # 5. Nariz / hocico
+        rect(0.0, 0.08, 0.04, 0.03, "#000000")
 
     def dibujar_elementos(self):
         # Incrementar el contador de frames para el parpadeo de la cabeza
@@ -420,9 +383,10 @@ class Snake(Game):
         # Se conserva el muestreo por coordenadas de siempre, pero acotado: si
         # el azar insiste en una casilla ocupada (p. ej. un random fijo o un
         # tablero casi lleno), cae a la lista de libres en vez de colgarse.
+        libres_set = set(libres)
         for _ in range(len(libres)):
             pos = (random.randint(0, self.ancho - 1), random.randint(0, self.alto - 1))
-            if pos in libres:
+            if pos in libres_set:
                 return pos
         return libres[0]
 

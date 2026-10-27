@@ -46,7 +46,6 @@ class TestSilencios(unittest.TestCase):
         con_silencio = tracker.cancion_pcm('b', [[440.0, 200], [0.0, 400], [440.0, 200]])
         self.assertEqual(len(muestras_de(con_silencio)) - len(muestras_de(dos_notas)),
                          int(tracker.FPS * 400 / 1000.0))
-        self.assertEqual(tracker.duracion_pcm([[440.0, 200], [0.0, 400], [440.0, 200]]), 800)
 
 
 class TestOndas(unittest.TestCase):

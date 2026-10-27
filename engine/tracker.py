@@ -27,7 +27,6 @@ BYTES_POR_MUESTRA = 2        # mono de 16 bits
 # hace que un tema se lea como retro.
 ONDA_SENOIDAL = 'SINE'
 ONDA_CUADRADA = 'SQUARE'
-ONDAS = (ONDA_SENOIDAL, ONDA_CUADRADA)
 
 # Cache en RAM: {firma: pcm_bytes}. La firma es el MD5 de la partitura,
 # asi dos canciones con las mismas notas comparten un solo bloque.
@@ -84,11 +83,6 @@ def cancion_pcm_voces(nombre, voces, onda=ONDA_SENOIDAL):
         return None
     _CACHE[firma] = pcm
     return pcm
-
-
-def duracion_pcm(notas):
-    """Duracion total de la partitura en milisegundos."""
-    return sum(int(voz[1]) for voz in notas)
 
 
 def sintetizar(notas, onda=ONDA_SENOIDAL):

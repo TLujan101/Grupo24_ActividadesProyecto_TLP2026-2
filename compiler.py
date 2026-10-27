@@ -250,51 +250,6 @@ class Parser:
         self.ast['config']['start_level'] = inicio
         self.niveles_es_default = False
 
-    def parsear_nivel(self, vistos):
-        self.consumir('LEVEL')
-        nombre = self.consumir()
-        self.consumir(':')
-        if nombre in vistos:
-            raise Exception("Error de sintaxis: el nivel '" + nombre +
-                            "' esta definido dos veces")
-        nivel = {'nombre': nombre}
-        while self.ver() not in (':', 'END', None):
-            entrada = self.MODIFICADORES_NIVEL.get(self.ver())
-            if entrada is None:
-                # Un modificador desconocido se reporta, nunca se ignora: si se
-                # pasara, el nivel arrancaria con el default sin avisar.
-                raise Exception("Error de sintaxis: modificador desconocido '" +
-                                str(self.ver()) + "' en el nivel '" + nombre + "'")
-            self.consumir()
-            clave, tipo = entrada
-            # TICK toma un real y MUSIC un identificador: por eso la tabla
-            # guarda el tipo. Sin esto, float('TEMA_CALMO') reventaria.
-            if tipo == 'real':
-                nivel[clave] = self.consumir_decimal()
-            elif tipo == 'numero':
-                nivel[clave] = self.consumir_numero()
-            else:
-                if self.ver() is None or self.ver() == 'END':
-                    raise Exception("Error de sintaxis: se esperaba un valor para '" + 
-                                    str(clave) + "' en el nivel '" + nombre + "'")
-                valor_leido = self.consumir()
-                
-                # Conversión opcional limpia para el booleano del veneno
-                if clave == 'poison_enabled':
-                    nivel[clave] = str(valor_leido).upper() == 'TRUE'
-                else:
-                    nivel[clave] = valor_leido
-        self.consumir('END')
-        if 'tick' in nivel and not (0 < nivel['tick'] < INFINITO):
-            # La comparacion sola no alcanza: en py2 nan <= 0 es False y
-            # inf <= 0 tambien, asi que ambos se colaban. Con un TICK nan el
-            # motor se come el valor (0.05 >= nan es False para siempre) y la
-            # partida queda congelada sin error de compilacion. Ademas json.dump
-            # escribe NaN/Infinity crudos, que no son JSON valido.
-            raise Exception("Error de sintaxis: TICK del nivel '" + nombre +
-                            "' debe ser mayor que 0")
-        return nivel
-
 
     # AUDIO DECLARADO EN EL .BRICK
     # -----------------------------

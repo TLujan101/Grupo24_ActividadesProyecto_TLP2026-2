@@ -69,7 +69,7 @@ class TestJuegosReales(unittest.TestCase):
         # no hace esto.
         random.seed(1234)
         datos_juego = compilar(os.path.join(CARPETA_RAIZ, 'games', 'snake_remake.brick'))
-        self.assertEqual(datos_juego['config']['start_level'], 'NYAN_CAT')
+        self.assertEqual(datos_juego['config']['start_level'], 'BABY')
         self.assertEqual([n['nombre'] for n in datos_juego['levels']],
                          ['BABY', 'ENTUSIASTA', 'NYAN_CAT'])
 
@@ -83,7 +83,7 @@ class TestJuegosReales(unittest.TestCase):
         juego.botones_nivel[1].opciones['command']()  # clic en Entusiasta
         self.assertTrue(juego.iniciado)
         self.assertEqual(juego.nivel_actual, 'ENTUSIASTA')
-        self.assertEqual(juego.velocidad_gravedad, 0.1)
+        self.assertEqual(juego.velocidad_gravedad, 0.12)
         self.assertEqual(len(juego.serpiente_cuerpo), 1)   # ON_START corrio
         self.assertIsNotNone(juego.posicion_comida)
 

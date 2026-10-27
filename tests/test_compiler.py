@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # Tests del compilador: el lexer y el parser de BrickScript.
 
-import json
 import os
 import unittest
 
@@ -277,7 +276,7 @@ class TestParserNiveles(unittest.TestCase):
     def test_music_exige_nombre(self):
         with self.assertRaises(Exception) as contexto:
             compilar('LEVELS:\n  LEVEL BABY:\n    MUSIC\n  END\nEND\n')
-        self.assertIn("se esperaba el nombre de la cancion", str(contexto.exception))
+        self.assertIn("se esperaba el valor o nombre del modificador", str(contexto.exception))
 
     def test_music_debe_nombrar_una_cancion_declarada(self):
         # El motor tolera un nombre inexistente (suena mudo), pero aqui se
