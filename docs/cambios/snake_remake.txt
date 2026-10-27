@@ -2,6 +2,31 @@
 
 RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 4):
 
+El detalle de cada cambio queda en las secciones 1 a 8 con sus archivos modificados.
+A continuación, el aporte de cada integrante según el historial de commits de la rama:
+
+* Andrés <xxicefireytxxgameplays@gmail.com>
+  - Implementación central de la rúbrica de la Actividad 4: bloque LEVELS con los
+    tres niveles (Baby, Entusiasta, Nyan Cat), geometrías adicionales en
+    DEFINE SHAPE (CIRCLE, TRIANGLE, NYAN_CAT), y el sistema de colisiones con
+    nubes, fruta venenosa y power-up "No Morir" (temporizador y cooldown).
+  - Estética del nivel Nyan Cat: cabeza circular con rasgos de gato y cola
+    multicolor con el operador módulo %.
+  - Estructura de este informe de cambios (docs/cambios/snake_remake.txt).
+
+* Mignite (Eche) <miguelangelecheverriisaza@gmail.com>
+  - Motor de audio y sintetizador: engine/audio.py y engine/tracker.py
+    (notas, frecuencias, onda senoidal/cuadrada y mezcla de dos voces).
+  - Música por nivel: TEMA_CALMO, TEMA_ENTUSIASTA y TEMA_NYAN (dos voces,
+    WAVE SQUARE), y efectos de sonido COMER, VENENO, POWERUP_FX y MORIR.
+  - Lexer: soporta notas con sostenido (D#4) y números decimales (TICK 0.06).
+  - Mejoras de experiencia de usuario, gameplay y visuales claras en Nyan Cat
+    y Entusiasta.
+  - Pruebas doradas de audio (md5 del PCM de TEMA_NYAN y Tetris).
+
+* TLujan101 <t0m4luj4c@gmail.com>
+  - Carga inicial de los archivos base del proyecto: estructura de games/,
+    grammars/, engine/ y tests/.
 
 ------------------------------ 1. MODIFICACIONES EN EL LENGUAJE DSL Y GRAMÁTICA ------------------------------
 
