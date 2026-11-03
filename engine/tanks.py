@@ -292,6 +292,39 @@ class Tanks(Game):
         cantidad = int(pickups[0][1].get('heal', 1)) if pickups else 1
         self.jugador['hp'] = min(self.jugador['max_hp'], self.jugador['hp'] + cantidad)
 
+    # NIVEL Y MUROS
+    # -------------
+
+    def iniciar_partida(self):
+        # Los muros se generan aqui y no en __init__: con dos niveles, __init__
+        # corre mientras el jugador todavia ve el menu de eleccion. ON_START
+        # llega despues, asi que los spawns borran los muros que los tapen.
+        self.jugador = None
+        self.enemigos = []
+        self.balas = []
+        self.martillo = None
+        self._generar_muros()
+        super(Tanks, self).iniciar_partida()
+
+    def _generar_muros(self):
+        self.grid = [[0 for _ in range(self.ancho)] for _ in range(self.alto)]
+        cantidad = int(self.nivel_config.get('walls', 0) or 0)
+        libres = [(x, y) for y in range(self.alto) for x in range(self.ancho)]
+        for _ in range(cantidad):
+            if not libres:
+                break               # WALLS mayor que el tablero: se corta aqui
+            pos = self._celda_libre_de(libres)
+            self.grid[pos[1]][pos[0]] = 1
+            libres.remove(pos)
+
+    def _celda_libre_de(self, libres):
+        # Mismo patron acotado que _ancla_libre: azar con fallback determinista.
+        for _ in range(len(libres)):
+            pos = (random.randint(0, self.ancho - 1), random.randint(0, self.alto - 1))
+            if pos in libres:
+                return pos
+        return libres[0]
+
     # TICK
     # ----
 
@@ -303,9 +336,99 @@ class Tanks(Game):
         super(Tanks, self).ejecutar_evento(nombre_evento)
 
     def avanzar_mundo(self, delta):
+        # Orden del spec: balas, enemigos (mover y disparar) y martillo. El
+        # ON TICK del .brick corre despues, en ejecutar_evento.
         self._avanzar_balas()
+        self._mover_enemigos(delta)
+        self._disparar_enemigos(delta)
+        self._recoger_martillo()
         if self.jugador and self.jugador['cooldown'] > 0:
             self.jugador['cooldown'] = max(0.0, self.jugador['cooldown'] - delta)
+
+    def _mover_enemigos(self, delta):
+        for enemigo in self.enemigos:
+            datos = self._forma(enemigo['nombre']) or {}
+            velocidad = int(datos.get('speed', 2) or 2)
+            enemigo['tiempo_movimiento'] += delta
+            if enemigo['tiempo_movimiento'] >= 1.0 / velocidad:
+                enemigo['tiempo_movimiento'] -= 1.0 / velocidad
+                self._intentar_mover_enemigo(enemigo)
+
+    def _intentar_mover_enemigo(self, enemigo):
+        datos = self._forma(enemigo['nombre']) or {}
+        matriz = self._matriz(datos)
+        # Cuatro intentos: la direccion actual y tres giros a la derecha. Si
+        # las cuatro estan bloqueadas se queda quieto (sin bucle infinito).
+        for _ in range(4):
+            dx, dy = enemigo['direccion']
+            girada = self._rotar_matriz(matriz, enemigo['direccion'])
+            if self._puede_ocupar(girada, enemigo['x'] + dx, enemigo['y'] + dy,
+                                  sin_enemigo=enemigo):
+                enemigo['x'] += dx
+                enemigo['y'] += dy
+                return
+            enemigo['direccion'] = ROTACION_DERECHA[enemigo['direccion']]
+
+    def _centro(self, entidad, datos):
+        lado = len(self._matriz(datos))
+        return (entidad['x'] + lado // 2, entidad['y'] + lado // 2)
+
+    def _direccion_apuntada(self, enemigo):
+        # Con el jugador en la misma fila o columna, dispara por ese eje; si
+        # no, por donde va. Sin pathfinding y sin nombres de forma de por medio.
+        if not self.jugador:
+            return enemigo['direccion']
+        px, py = self._centro(self.jugador, self._forma(self.jugador['nombre']) or {})
+        ex, ey = self._centro(enemigo, self._forma(enemigo['nombre']) or {})
+        if px == ex:
+            return (0, 1) if py > ey else (0, -1)
+        if py == ey:
+            return (1, 0) if px > ex else (-1, 0)
+        return enemigo['direccion']
+
+    def _disparar_enemigos(self, delta):
+        for enemigo in self.enemigos:
+            datos = self._forma(enemigo['nombre']) or {}
+            cadencia = float(datos.get('fire_rate', 3) or 3)
+            enemigo['tiempo_disparo'] += delta
+            if enemigo['tiempo_disparo'] < cadencia:
+                continue
+            enemigo['tiempo_disparo'] -= cadencia
+            bala = self._bala_de_bando('ENEMY')
+            if not bala:
+                continue
+            nombre, datos_bala = bala
+            direccion = self._direccion_apuntada(enemigo)
+            matriz = self._rotar_matriz(self._matriz(datos), direccion)
+            x, y = self._celda_frente(matriz, enemigo['x'], enemigo['y'], direccion)
+            if not self._dentro((x, y)):
+                continue
+            if self.grid[y][x] != 0:
+                self.grid[y][x] = 0      # las balas enemigas tambien rompen muros
+                continue
+            self.balas.append({'x': x, 'y': y, 'dx': direccion[0], 'dy': direccion[1],
+                               'dueno': 'ENEMY',
+                               'dano': int(datos_bala.get('damage', 1)),
+                               'color': self._color_de(datos_bala)})
+
+    def _recoger_martillo(self):
+        if not self.jugador or not self.martillo:
+            return
+        if self.martillo not in self._celdas_jugador():
+            return
+        self.ejecutar_evento('ON_EAT_HAMMER')
+        if self.martillo in self._celdas_jugador():
+            # El evento no lo reubico: lo hace el motor (patron de Snake).
+            self._spawn_martillo()
+
+    def _spawn_martillo(self):
+        pickups = self._formas_de_tipo('PICKUP')
+        if not pickups:
+            self.martillo = None
+            return
+        # Sin celda libre queda en None: no se repite el evento cada tick
+        # (Review Focus 3).
+        self.martillo = self._ancla_libre(self._matriz(pickups[0][1]))
 
     def _jugador_en(self, x, y):
         return (x, y) in self._celdas_jugador()

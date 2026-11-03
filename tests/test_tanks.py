@@ -209,3 +209,131 @@ class TestTanks(unittest.TestCase):
         juego.manejar_tecla('SPACE')
         self.assertEqual(juego.balas, [])
         self.assertEqual(juego.jugador['cooldown'], 0.3)
+
+
+class TestTanksMundo(unittest.TestCase):
+
+    def setUp(self):
+        random.seed(1234)
+
+    def test_martillo_sana_y_reaparece(self):
+        juego = Tanks(datos_tanks())
+        juego.jugador['hp'] = 1
+        juego.martillo = (3, 5)          # dentro de la cruz del jugador
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.jugador['hp'], 2)
+        self.assertIsNotNone(juego.martillo)
+        self.assertNotEqual(juego.martillo, (3, 5))
+
+    def test_el_evento_puede_reubicar_el_martillo_sin_duplicarlo(self):
+        datos = datos_tanks()
+        datos['events']['ON_EAT_HAMMER'] = [accion('HEAL', 'PLAYER'),
+                                            accion('SPAWN', 'MARTILLO', [[7, 7]])]
+        juego = Tanks(datos)
+        juego.jugador['hp'] = 2
+        juego.martillo = (3, 5)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.jugador['hp'], 3)
+        self.assertEqual(juego.martillo, (7, 7))   # el motor no lo movio otra vez
+
+    def test_martillo_sin_celda_libre_no_repite_el_evento(self):
+        # Review Focus 3: tablero lleno de muros salvo la huella del jugador.
+        # El martillo se cura una vez y queda en None; no hay bucle.
+        juego = Tanks(datos_tanks())
+        juego.jugador['hp'] = 1
+        for y in range(juego.alto):
+            for x in range(juego.ancho):
+                juego.grid[y][x] = 1
+        for x, y in juego._celdas_jugador():
+            juego.grid[y][x] = 0
+        juego.martillo = (3, 5)          # dentro de la cruz del jugador
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.jugador['hp'], 2)
+        self.assertIsNone(juego.martillo)
+        juego.ejecutar_evento('ON_TICK')
+        self.assertEqual(juego.jugador['hp'], 2)
+
+    def test_enemigo_se_mueve_solo(self):
+        juego = Tanks(datos_tanks())
+        enemigo = agregar_enemigo(juego, 0, 0)
+        juego.avanzar_mundo(0.5)                   # SPEED 2 => un paso cada 0.5 s
+        self.assertEqual((enemigo['x'], enemigo['y']), (1, 0))
+
+    def test_enemigo_gira_al_chocar(self):
+        juego = Tanks(datos_tanks())
+        enemigo = agregar_enemigo(juego, 0, 0)
+        juego.grid[0][1] = 1
+        juego.avanzar_mundo(0.5)
+        self.assertEqual(enemigo['direccion'], (0, 1))
+        self.assertEqual((enemigo['x'], enemigo['y']), (0, 1))
+
+    def test_enemigo_rodeado_se_queda_quieto(self):
+        # Review Focus 2: cuatro muros alrededor; ni bucle ni atravesarlos.
+        juego = Tanks(datos_tanks())
+        enemigo = agregar_enemigo(juego, 1, 1)
+        for x, y in ((2, 1), (0, 1), (1, 0), (1, 2)):
+            juego.grid[y][x] = 1
+        juego.avanzar_mundo(0.5)
+        self.assertEqual((enemigo['x'], enemigo['y']), (1, 1))
+        self.assertEqual(enemigo['direccion'], (1, 0))   # cuatro giros, vuelve al inicio
+
+    def test_enemigo_dispara_apuntado(self):
+        juego = Tanks(datos_tanks())     # jugador 3x3 en (2,4): centro (3,5)
+        # Misma columna que el centro del jugador y baja por ella (si apuntara
+        # a la derecha, el primer paso lo sacaria de la columna).
+        agregar_enemigo(juego, 3, 0, direccion=(0, 1))
+        juego.avanzar_mundo(3.0)         # FIRE_RATE 3
+        balas = [b for b in juego.balas if b['dueno'] == 'ENEMY']
+        self.assertEqual(len(balas), 1)
+        self.assertEqual((balas[0]['dx'], balas[0]['dy']), (0, 1))
+
+    def test_enemigo_desalineado_dispara_al_frente(self):
+        juego = Tanks(datos_tanks())
+        agregar_enemigo(juego, 0, 0)
+        juego.avanzar_mundo(3.0)
+        balas = [b for b in juego.balas if b['dueno'] == 'ENEMY']
+        self.assertEqual(len(balas), 1)
+        self.assertEqual((balas[0]['dx'], balas[0]['dy']), (1, 0))
+
+    def test_los_muros_del_nivel_se_generan_al_iniciar(self):
+        datos = datos_tanks()
+        datos['levels'] = [{'nombre': 'BABY', 'walls': 6}]
+        # Sin ON_START: los spawns borran muros bajo su matriz y el conteo
+        # exacto dejaria de ser 6.
+        datos['events'].pop('ON_START')
+        juego = Tanks(datos)
+        self.assertEqual(sum(fila.count(1) for fila in juego.grid), 6)
+
+    def test_muros_se_limitan_a_las_celdas_del_tablero(self):
+        # Review Focus 5: WALLS 100 en 8x8 = 64 celdas; no cuelga y se corta.
+        datos = datos_tanks()
+        datos['levels'] = [{'nombre': 'BABY', 'walls': 100}]
+        datos['events'].pop('ON_START')          # sin jugador, el tablero queda lleno
+        juego = Tanks(datos)
+        self.assertEqual(sum(fila.count(1) for fila in juego.grid), 64)
+
+    def test_dos_niveles_no_dejan_muros_sobre_el_menu(self):
+        datos = datos_tanks()
+        datos['levels'] = [{'nombre': 'PATRULLA', 'tick': 0.12, 'walls': 6},
+                           {'nombre': 'ASEDIO', 'tick': 0.08, 'walls': 10}]
+        datos['config']['start_level'] = 'PATRULLA'
+        datos['events'].pop('ON_START')          # spawns no borran muros
+        juego = Tanks(datos)
+        self.assertFalse(juego.iniciado)
+        self.assertEqual(sum(fila.count(1) for fila in juego.grid), 0)
+
+        juego.run()
+        juego.botones_nivel[1].opciones['command']()
+        self.assertTrue(juego.iniciado)
+        self.assertEqual(juego.velocidad_gravedad, 0.08)
+        self.assertEqual(sum(fila.count(1) for fila in juego.grid), 10)
+
+    def test_fuzz_cinco_teclas_trescientas_veces(self):
+        juego = Tanks(datos_tanks())
+        teclas = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'SPACE']
+        for _ in range(300):
+            if juego.juego_terminado:
+                break
+            juego.manejar_tecla(random.choice(teclas))
+            juego.game_loop()
+        self.assertGreater(juego.frame, 0)
