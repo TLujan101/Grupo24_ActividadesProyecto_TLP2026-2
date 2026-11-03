@@ -104,6 +104,16 @@ class TestGame(unittest.TestCase):
         juego.manejar_input_gui(EventoFalso('a'))
         self.assertEqual(juego.acciones, [('MOVE', 'UP')])
 
+        # Espacio dispara ON_KEY_SHOOT: es la tecla de Tanks. Los juegos
+        # clasicos no declaran el evento y la tecla no hace nada.
+        juego = JuegoPrueba(datos({'ON_KEY_SHOOT': [{'accion': 'SHOOT', 'objeto': 'PLAYER',
+                                                     'params': []}]}))
+        juego.manejar_input_gui(EventoFalso('space'))
+        self.assertEqual(juego.acciones, [('SHOOT', 'PLAYER')])
+        otro = JuegoPrueba(datos())
+        otro.manejar_input_gui(EventoFalso('space'))
+        self.assertEqual(otro.acciones, [])
+
     def test_loop(self):
         eventos = {'ON_TICK': [{'accion': 'INCREASE_SCORE', 'objeto': '1', 'params': []}]}
         juego = JuegoPrueba(datos(eventos))

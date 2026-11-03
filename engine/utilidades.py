@@ -12,6 +12,7 @@ Colores = {
     "RED": "#FF0000",
     "BLUE": "#0000FF",
     "ORANGE": "#FF7F00",
+    "GRAY": "#808080",
     "WHITE": "#FFFFFF",
     "BLACK": "#000000",
     "RAINBOW": "#FFFFFF"

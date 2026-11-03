@@ -373,6 +373,10 @@ class Game(object):
         # Las flechas disparan ON_KEY_*; cada juego decide la accion.
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
+        elif key == 'SPACE':
+            # Tanks dispara con espacio; los juegos viejos no declaran
+            # ON_KEY_SHOOT y el evento simplemente no existe.
+            self.ejecutar_evento('ON_KEY_SHOOT')
 
 
     # DIBUJO

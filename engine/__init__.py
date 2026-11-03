@@ -10,13 +10,15 @@
 from .game import Game
 from .tetris import Tetris
 from .snake import Snake
+from .tanks import Tanks
 
-__all__ = ['Game', 'Tetris', 'Snake', 'JUEGOS', 'crear_juego']
+__all__ = ['Game', 'Tetris', 'Snake', 'Tanks', 'JUEGOS', 'crear_juego']
 
 # GAME_TYPE del .brick -> clase que ejecuta ese juego
 JUEGOS = {
     'TETRIS': Tetris,
     'SNAKE': Snake,
+    'TANKS': Tanks,
 }
 
 def crear_juego(datos_juego):

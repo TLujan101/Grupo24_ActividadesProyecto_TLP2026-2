@@ -13,7 +13,7 @@ import sys
 import unittest
 
 import compiler
-from engine import crear_juego, JUEGOS, Game, Tetris, Snake, tracker
+from engine import crear_juego, JUEGOS, Game, Tetris, Snake, Tanks, tracker
 from engine.utilidades import eleccion_ponderada
 
 CARPETA_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +35,10 @@ class TestRegistroDeJuegos(unittest.TestCase):
         self.assertIsInstance(crear_juego(vacio), Tetris)
         vacio['tipo_juego'] = 'SNAKE'
         self.assertIsInstance(crear_juego(vacio), Snake)
+        self.assertIn('TANKS', JUEGOS)
+        vacio['tipo_juego'] = 'TANKS'
+        vacio['shapes'] = {}
+        self.assertIsInstance(crear_juego(vacio), Tanks)
         self.assertRaises(ValueError, crear_juego, {'tipo_juego': 'PONG', 'events': {}})
 
     def test_eleccion_ponderada(self):
