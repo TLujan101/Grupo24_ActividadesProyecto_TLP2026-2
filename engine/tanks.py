@@ -125,7 +125,7 @@ class Tanks(Game):
         matriz = self._rotar_matriz(self._matriz(datos), enemigo['direccion'])
         return set(self._celdas(matriz, enemigo['x'], enemigo['y']))
 
-    def _ocupadas(self, sin_jugador=False, sin_enemigo=None):
+    def _ocupadas(self, sin_jugador=False, sin_enemigo=None, sin_martillo=False):
         ocupadas = set()
         if self.jugador and not sin_jugador:
             ocupadas.update(self._celdas_jugador())
@@ -133,15 +133,16 @@ class Tanks(Game):
             if enemigo is sin_enemigo:
                 continue
             ocupadas.update(self._celdas_de_enemigo(enemigo))
-        if self.martillo:
+        if self.martillo and not sin_martillo:
             ocupadas.add(self.martillo)
         for bala in self.balas:
             ocupadas.add((bala['x'], bala['y']))
         return ocupadas
 
     def _puede_ocupar(self, matriz, x, y, ignorar_muros=False, sin_jugador=False,
-                      sin_enemigo=None):
-        ocupadas = self._ocupadas(sin_jugador=sin_jugador, sin_enemigo=sin_enemigo)
+                      sin_enemigo=None, sin_martillo=False):
+        ocupadas = self._ocupadas(sin_jugador=sin_jugador, sin_enemigo=sin_enemigo,
+                                  sin_martillo=sin_martillo)
         for cx, cy in self._celdas(matriz, x, y):
             if not self._dentro((cx, cy)):
                 return False
@@ -156,9 +157,10 @@ class Tanks(Game):
             if self._dentro((cx, cy)):
                 self.grid[cy][cx] = 0
 
-    def _ancla_libre(self, matriz):
+    def _ancla_libre(self, matriz, ignorar_muros=False, sin_jugador=False):
         candidatas = [(x, y) for y in range(self.alto) for x in range(self.ancho)
-                      if self._puede_ocupar(matriz, x, y)]
+                      if self._puede_ocupar(matriz, x, y, ignorar_muros=ignorar_muros,
+                                            sin_jugador=sin_jugador)]
         if not candidatas:
             return None
         # Muestreo acotado + fallback determinista (mismo patron que Snake):
@@ -228,13 +230,20 @@ class Tanks(Game):
         if params and params[0] != 'RANDOM':
             coords = params[0]
             x, y = int(coords[0]), int(coords[1])
+            # El jugador siempre existe: si el .brick lo pone en el borde se
+            # recorta al tablero en vez de ignorar el spawn (quedaria sin jugador).
+            x = max(0, min(x, self.ancho - len(matriz[0])))
+            y = max(0, min(y, self.alto - len(matriz)))
         else:
-            ancla = self._ancla_libre(matriz)
+            ancla = self._ancla_libre(matriz, ignorar_muros=True, sin_jugador=True)
             x, y = ancla if ancla else (self.ancho // 2, self.alto // 2)
-        # El jugador siempre existe: si el .brick lo pone en el borde se
-        # recorta al tablero en vez de ignorar el spawn (quedaria sin jugador).
-        x = max(0, min(x, self.ancho - len(matriz[0])))
-        y = max(0, min(y, self.alto - len(matriz)))
+        # El spec pide descartar un spawn que se superpone; al jugador no se le
+        # puede descartar, asi que se le busca una celda libre (los muros bajo
+        # su matriz se borran igual).
+        if not self._puede_ocupar(matriz, x, y, ignorar_muros=True, sin_jugador=True):
+            libre = self._ancla_libre(matriz, ignorar_muros=True, sin_jugador=True)
+            if libre is not None:
+                x, y = libre
         self._borrar_muros(matriz, x, y)
         vida = int(datos.get('hp', VIDA_JUGADOR))
         self.jugador = {'nombre': nombre, 'x': x, 'y': y, 'hp': vida,
@@ -264,9 +273,12 @@ class Tanks(Game):
         self.jugador['orientacion'] = (dx, dy)
         matriz = self._matriz_jugador()
         if self._puede_ocupar(matriz, self.jugador['x'] + dx, self.jugador['y'] + dy,
-                              sin_jugador=True):
+                              sin_jugador=True, sin_martillo=True):
             self.jugador['x'] += dx
             self.jugador['y'] += dy
+        # El martillo no bloquea el paso, asi que se recoge al pisarlo, no solo
+        # al final del tick (entre ticks el jugador podria cruzarlo y salir).
+        self._recoger_martillo()
 
     def _bala_de_bando(self, bando):
         balas = self._formas_de_tipo('BULLET', bando)
@@ -283,15 +295,9 @@ class Tanks(Game):
         dx, dy = self.jugador['orientacion']
         x, y = self._celda_frente(self._matriz_jugador(), self.jugador['x'],
                                   self.jugador['y'], (dx, dy))
-        if not self._dentro((x, y)):
-            return
-        if self.grid[y][x] != 0:
-            # Disparar pegado a un muro lo destruye, pero no sale bala.
-            self.grid[y][x] = 0
-            return
-        self.balas.append({'x': x, 'y': y, 'dx': dx, 'dy': dy, 'dueno': 'PLAYER',
-                           'dano': int(datos.get('damage', 1)),
-                           'color': self._color_de(datos)})
+        # Pegado a un muro, el disparo lo destruye y no sale bala: lo resuelve
+        # _resolver_bala en la celda de nacimiento.
+        self._nueva_bala(x, y, dx, dy, 'PLAYER', datos)
 
     def _sanar_jugador(self):
         if not self.jugador:
@@ -409,15 +415,9 @@ class Tanks(Game):
             direccion = self._direccion_apuntada(enemigo)
             matriz = self._rotar_matriz(self._matriz(datos), direccion)
             x, y = self._celda_frente(matriz, enemigo['x'], enemigo['y'], direccion)
-            if not self._dentro((x, y)):
-                continue
-            if self.grid[y][x] != 0:
-                self.grid[y][x] = 0      # las balas enemigas tambien rompen muros
-                continue
-            self.balas.append({'x': x, 'y': y, 'dx': direccion[0], 'dy': direccion[1],
-                               'dueno': 'ENEMY',
-                               'dano': int(datos_bala.get('damage', 1)),
-                               'color': self._color_de(datos_bala)})
+            # Las balas enemigas tambien destruyen muros; lo resuelve
+            # _resolver_bala al nacer la bala.
+            self._nueva_bala(x, y, direccion[0], direccion[1], 'ENEMY', datos_bala)
 
     def _recoger_martillo(self):
         if not self.jugador or not self.martillo:
@@ -447,35 +447,50 @@ class Tanks(Game):
                 return enemigo
         return None
 
+    def _nueva_bala(self, x, y, dx, dy, dueno, datos):
+        # La bala resuelve el choque ya en su celda de nacimiento: un disparo a
+        # quemarropa (la celda de enfrente ya es del objetivo) pega en este
+        # tick en vez de colarse al avanzar.
+        bala = {'x': x, 'y': y, 'dx': dx, 'dy': dy, 'dueno': dueno,
+                'dano': int(datos.get('damage', 1)),
+                'color': self._color_de(datos)}
+        if self._resolver_bala(bala):
+            self.balas.append(bala)
+
+    def _resolver_bala(self, bala):
+        # Devuelve True si la bala sigue viva en su celda actual.
+        x, y = bala['x'], bala['y']
+        if not self._dentro((x, y)):
+            return False
+        if self.grid[y][x] != 0:
+            self.grid[y][x] = 0
+            self.ejecutar_evento('ON_BULLET_HIT_WALL')
+            return False
+        if bala['dueno'] == 'PLAYER':
+            enemigo = self._enemigo_en(x, y)
+            if enemigo is None:
+                return True
+            enemigo['hp'] -= bala['dano']
+            if enemigo['hp'] <= 0:
+                self.enemigos.remove(enemigo)
+                self.ejecutar_evento('ON_ENEMY_DEFEATED')
+            return False
+        if self._jugador_en(x, y):
+            self.jugador['hp'] -= bala['dano']
+            self.ejecutar_evento('ON_PLAYER_HIT')
+            if self.jugador['hp'] <= 0:
+                self.jugador['hp'] = 0
+                self.juego_terminado = True
+            return False
+        return True
+
     def _avanzar_balas(self):
         supervivientes = []
         for bala in self.balas:
             bala['x'] += bala['dx']
             bala['y'] += bala['dy']
-            if not self._dentro((bala['x'], bala['y'])):
-                continue
-            if self.grid[bala['y']][bala['x']] != 0:
-                self.grid[bala['y']][bala['x']] = 0
-                self.ejecutar_evento('ON_BULLET_HIT_WALL')
-                continue
-            if bala['dueno'] == 'PLAYER':
-                enemigo = self._enemigo_en(bala['x'], bala['y'])
-                if enemigo is None:
-                    supervivientes.append(bala)
-                    continue
-                enemigo['hp'] -= bala['dano']
-                if enemigo['hp'] <= 0:
-                    self.enemigos.remove(enemigo)
-                    self.ejecutar_evento('ON_ENEMY_DEFEATED')
-                continue
-            if self._jugador_en(bala['x'], bala['y']):
-                self.jugador['hp'] -= bala['dano']
-                self.ejecutar_evento('ON_PLAYER_HIT')
-                if self.jugador['hp'] <= 0:
-                    self.jugador['hp'] = 0
-                    self.juego_terminado = True
-                continue
-            supervivientes.append(bala)
+            if self._resolver_bala(bala):
+                supervivientes.append(bala)
         self.balas = supervivientes
 
     # DIBUJO

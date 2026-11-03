@@ -229,6 +229,27 @@ class TestTanks(unittest.TestCase):
         self.assertEqual(juego.balas, [])
         self.assertEqual(juego.jugador['cooldown'], 0.3)
 
+    def test_bala_del_jugador_a_quemarropa_dana_el_mismo_tick(self):
+        # La bala nace en la celda del enemigo: el choque se resuelve al nacer,
+        # no un tick despues (cuando ya la habria atravesado).
+        juego = Tanks(datos_tanks())
+        juego.jugador['orientacion'] = (1, 0)
+        enemigo = agregar_enemigo(juego, 5, 5, hp=2)   # celda de la boca del cañon
+        juego.manejar_tecla('SPACE')
+        self.assertEqual(enemigo['hp'], 1)
+        self.assertEqual(juego.balas, [])
+
+    def test_spawn_del_jugador_evita_superponerse(self):
+        # El spec descarta un spawn que se superpone; al jugador no se le puede
+        # descartar (quedaria sin partida), asi que se le busca otra celda.
+        datos = datos_tanks()
+        datos['events']['ON_START'] = [accion('SPAWN', 'ENEMIGO', [[3, 5]]),
+                                       accion('SPAWN', 'PLAYER', [[2, 4]])]
+        juego = Tanks(datos)
+        self.assertIsNotNone(juego.jugador)
+        ocupadas = juego._celdas_de_enemigo(juego.enemigos[0])
+        self.assertFalse(juego._celdas_jugador() & ocupadas)
+
 
 class TestTanksMundo(unittest.TestCase):
 
@@ -254,6 +275,29 @@ class TestTanksMundo(unittest.TestCase):
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.jugador['hp'], 3)
         self.assertEqual(juego.martillo, (7, 7))   # el motor no lo movio otra vez
+
+    def test_el_martillo_se_recoge_caminando_hasta_el(self):
+        # El martillo no bloquea el paso: el spec lista muro/borde/enemigo como
+        # choques de MOVE, no el pickup. Antes el jugador se paraba a un lado y
+        # ON_EAT_HAMMER nunca llegaba a dispararse en una partida real.
+        juego = Tanks(datos_tanks())
+        juego.jugador['hp'] = 1
+        juego.martillo = (5, 5)          # en la huella del paso a la derecha
+        juego.manejar_tecla('RIGHT')
+        self.assertEqual((juego.jugador['x'], juego.jugador['y']), (3, 4))
+        self.assertEqual(juego.jugador['hp'], 2)
+        self.assertNotEqual(juego.martillo, (5, 5))
+
+    def test_bala_enemiga_a_quemarropa_dana_el_mismo_tick(self):
+        # El enemigo queda pegado al jugador: su bala nace en una celda del
+        # jugador y debe pegarle al nacer, no atravesarlo al avanzar.
+        juego = Tanks(datos_tanks())     # jugador 3x3 en (2,4): centro (3,5)
+        enemigo = agregar_enemigo(juego, 3, 3, direccion=(0, 1))
+        enemigo['tiempo_disparo'] = 3.0  # listo para disparar, sin moverse
+        juego._disparar_enemigos(0.0)
+        self.assertEqual(juego.jugador['hp'], 2)
+        self.assertEqual(juego.puntuacion, 1)      # ON_PLAYER_HIT corrio
+        self.assertEqual(juego.balas, [])
 
     def test_martillo_sin_celda_libre_no_repite_el_evento(self):
         # Review Focus 3: tablero lleno de muros salvo la huella del jugador.
