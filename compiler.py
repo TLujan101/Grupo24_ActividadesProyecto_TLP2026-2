@@ -94,6 +94,8 @@ class Parser:
             else:
                 self.posicion += 1
         self.validar_musicas_de_niveles()
+        if self.ast['tipo_juego'] == 'TANKS':
+            self.validar_tanques()
         return self.ast
 
     def validar_musicas_de_niveles(self):
@@ -106,6 +108,49 @@ class Parser:
                 raise Exception("Error de sintaxis: el nivel '" + nivel['nombre'] +
                                 "' pide la cancion '" + cancion +
                                 "' pero no esta definida")
+
+    def validar_tanques(self):
+        # Solo GAME_TYPE TANKS: Snake y Tetris no declaran TYPE y no pasan por
+        # aqui. Itera una lista ordenada porque en py2.7 el dict de shapes no
+        # conserva el orden de declaracion.
+        formas = sorted(self.ast['shapes'].items())
+        dicts = [(nombre, datos) for nombre, datos in formas if isinstance(datos, dict)]
+
+        jugadores = [nombre for nombre, datos in dicts if datos.get('type') == 'PLAYER']
+        if len(jugadores) != 1:
+            raise Exception("Error de sintaxis: TANKS necesita exactamente una forma con "
+                            "TYPE PLAYER (hay " + str(len(jugadores)) + ")")
+        if not [1 for _, datos in dicts if datos.get('type') == 'ENEMY']:
+            raise Exception("Error de sintaxis: TANKS necesita al menos una forma con TYPE ENEMY")
+
+        balas = [(nombre, datos) for nombre, datos in dicts if datos.get('type') == 'BULLET']
+        for nombre, datos in balas:
+            if datos.get('owner') not in self.BANDOS:
+                raise Exception("Error de sintaxis: la bala '" + nombre +
+                                "' necesita OWNER PLAYER o OWNER ENEMY")
+        if not [1 for _, datos in balas if datos.get('owner') == 'PLAYER']:
+            raise Exception("Error de sintaxis: TANKS necesita una bala con TYPE BULLET OWNER PLAYER")
+        if not [1 for _, datos in balas if datos.get('owner') == 'ENEMY']:
+            raise Exception("Error de sintaxis: TANKS necesita una bala con TYPE BULLET OWNER ENEMY")
+
+        for nombre, datos in dicts:
+            for clave, etiqueta in self.ETIQUETAS_NUMERICAS.items():
+                if clave in datos and datos[clave] < 1:
+                    raise Exception("Error de sintaxis: el atributo " + etiqueta +
+                                    " de la forma '" + nombre + "' debe ser mayor o igual a 1")
+            tipo = datos.get('type')
+            for matriz in datos.get('estados') or []:
+                if not matriz or not any(valor != 0 for fila in matriz for valor in fila):
+                    raise Exception("Error de sintaxis: la forma '" + nombre +
+                                    "' tiene la matriz sin celdas encendidas")
+                ancho = len(matriz[0])
+                for fila in matriz:
+                    if len(fila) != ancho:
+                        raise Exception("Error de sintaxis: la forma '" + nombre +
+                                        "' tiene filas de distinto ancho")
+                if tipo in self.MATRICES_CUADRADAS and len(matriz) != ancho:
+                    raise Exception("Error de sintaxis: la forma '" + nombre + "' con TYPE " +
+                                    str(tipo) + " necesita una matriz cuadrada")
 
     def consumir(self, token_esperado=None):
         if self.posicion < len(self.tokens):
@@ -163,18 +208,28 @@ class Parser:
             self.consumir('DEFINE')
             self.consumir('SHAPE')
             nombre_shape = self.consumir()
-            geometry_shape = "RECT"
-            color_shape = "CYAN"
-            chance_shape = 10
-            
-            while self.ver() in ("GEOMETRY", "COLOR", "CHANCE"):
+            datos = {'geometry': 'RECT', 'color': 'CYAN', 'chance': 10}
+
+            # TYPE: PLAYER y TYPE PLAYER son equivalentes: solo TYPE y OWNER
+            # admiten los dos puntos opcionales.
+            while self.ver() in self.ATRIBUTOS_SHAPE:
                 token = self.consumir()
-                if token == "GEOMETRY":
-                    geometry_shape = self.consumir()
-                elif token == "COLOR":
-                    color_shape = self.consumir()
-                elif token == "CHANCE":
-                    chance_shape = self.consumir_numero()
+                clave, tipo = self.ATRIBUTOS_SHAPE[token]
+                if token in ('TYPE', 'OWNER') and self.ver() == ':':
+                    self.consumir(':')
+                if tipo == 'numero':
+                    datos[clave] = self.consumir_numero()
+                    continue
+                valor = self.consumir()
+                if token == 'TYPE' and valor not in self.TIPOS_ENTIDAD:
+                    raise Exception("Error de sintaxis: TYPE '" + str(valor) +
+                                    "' no valido en la forma '" + nombre_shape +
+                                    "' (use PLAYER, ENEMY, BULLET, WALL, PICKUP o BOSS)")
+                if token == 'OWNER' and valor not in self.BANDOS:
+                    raise Exception("Error de sintaxis: OWNER '" + str(valor) +
+                                    "' no valido en la forma '" + nombre_shape +
+                                    "' (use PLAYER o ENEMY)")
+                datos[clave] = valor
 
             self.consumir(':')
             estados = []
@@ -195,12 +250,8 @@ class Parser:
                     matriz.append(fila)
                 estados.append(matriz)
             self.consumir('END')
-            self.ast['shapes'][nombre_shape] = {
-                "estados": estados, 
-                "geometry": geometry_shape,
-                "color": color_shape, 
-                "chance": chance_shape
-            }
+            datos['estados'] = estados
+            self.ast['shapes'][nombre_shape] = datos
     # NIVELES
     # --------
     #
@@ -208,7 +259,30 @@ class Parser:
     # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
     # que la tecla 2 elegiria un nivel arbitrario.
 
-    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero')}
+    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero'), 'WALLS': ('walls', 'numero')}
+
+    # Atributos de DEFINE SHAPE. COLOR/CHANCE/GEOMETRY ya existian; el resto es
+    # de la Actividad 5. La tabla guarda el tipo del valor para saber si se lee
+    # con consumir_numero() o con consumir().
+    ATRIBUTOS_SHAPE = {
+        'GEOMETRY': ('geometry', 'nombre'),
+        'COLOR': ('color', 'nombre'),
+        'CHANCE': ('chance', 'numero'),
+        'TYPE': ('type', 'nombre'),
+        'HP': ('hp', 'numero'),
+        'DAMAGE': ('damage', 'numero'),
+        'SPEED': ('speed', 'numero'),
+        'FIRE_RATE': ('fire_rate', 'numero'),
+        'HEAL': ('heal', 'numero'),
+        'OWNER': ('owner', 'nombre'),
+    }
+    TIPOS_ENTIDAD = ('PLAYER', 'ENEMY', 'BULLET', 'WALL', 'PICKUP', 'BOSS')
+    BANDOS = ('PLAYER', 'ENEMY')
+    # Solo se exige matriz cuadrada a las entidades que ocupan la grilla como
+    # un bloque (la bala y el pickup son de 1 celda).
+    MATRICES_CUADRADAS = ('PLAYER', 'ENEMY', 'BOSS', 'WALL')
+    ETIQUETAS_NUMERICAS = {'hp': 'HP', 'damage': 'DAMAGE', 'speed': 'SPEED',
+                           'fire_rate': 'FIRE_RATE', 'heal': 'HEAL'}
 
     def parsear_niveles(self):
         # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END

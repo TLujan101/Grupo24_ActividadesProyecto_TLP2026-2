@@ -315,5 +315,92 @@ class TestParserNiveles(unittest.TestCase):
                          [0.3, 0.2, 0.1])
 
 
+def fuente_tanks(jugador='DEFINE SHAPE JUGADOR TYPE PLAYER HP 3 COLOR GREEN: STATE 1: [1] END',
+                 enemigo='DEFINE SHAPE ENEMIGO TYPE ENEMY HP 1 SPEED 2 FIRE_RATE 3 COLOR RED: STATE 1: [1] END',
+                 balas=('DEFINE SHAPE BALA_JUGADOR TYPE BULLET OWNER PLAYER DAMAGE 1: STATE 1: [1] END\n'
+                        'DEFINE SHAPE BALA_ENEMIGA TYPE: BULLET OWNER: ENEMY DAMAGE 1: STATE 1: [1] END'),
+                 extra=''):
+    return ('GAME_TYPE TANKS\nGAME_GRID (8, 8)\n' + jugador + '\n' + enemigo + '\n' +
+            balas + '\n' + extra)
+
+
+class TestAtributosShapeTanks(unittest.TestCase):
+
+    def test_type_hp_y_color(self):
+        jugador = compilar(fuente_tanks())['shapes']['JUGADOR']
+        self.assertEqual(jugador['type'], 'PLAYER')
+        self.assertEqual(jugador['hp'], 3)
+        self.assertEqual(jugador['color'], 'GREEN')
+
+    def test_type_y_owner_admiten_dos_puntos(self):
+        bala = compilar(fuente_tanks())['shapes']['BALA_ENEMIGA']
+        self.assertEqual(bala['type'], 'BULLET')
+        self.assertEqual(bala['owner'], 'ENEMY')
+        self.assertEqual(bala['damage'], 1)
+
+    def test_atributos_numericos_del_enemigo(self):
+        enemigo = compilar(fuente_tanks())['shapes']['ENEMIGO']
+        self.assertEqual((enemigo['hp'], enemigo['speed'], enemigo['fire_rate']), (1, 2, 3))
+
+    def test_heal_del_pickup(self):
+        ast = compilar(fuente_tanks(extra='DEFINE SHAPE MARTILLO TYPE PICKUP HEAL 1: STATE 1: [1] END'))
+        self.assertEqual(ast['shapes']['MARTILLO']['heal'], 1)
+
+    def test_los_atributos_ausentes_no_se_guardan(self):
+        muro = compilar(fuente_tanks(extra='DEFINE SHAPE MURO TYPE WALL: STATE 1: [1] END'))['shapes']['MURO']
+        self.assertEqual(muro['type'], 'WALL')
+        for clave in ('hp', 'damage', 'speed', 'fire_rate', 'heal', 'owner'):
+            self.assertNotIn(clave, muro)
+
+    def test_walls_es_un_modificador_de_nivel(self):
+        ast = compilar(fuente_tanks(extra='LEVELS:\n  START: PATRULLA\n'
+                                          '  LEVEL PATRULLA:\n    TICK 0.12\n    WALLS 6\n  END\nEND\n'))
+        self.assertEqual(ast['levels'][0]['walls'], 6)
+        self.assertEqual(ast['levels'][0]['tick'], 0.12)
+
+
+class TestValidacionTanks(unittest.TestCase):
+
+    def test_otro_juego_no_pasa_por_la_validacion(self):
+        # Snake no declara TYPE PLAYER y aun asi compila: la validacion es solo TANKS.
+        ast = compilar('GAME_TYPE SNAKE\nGAME_GRID (5, 5)\nLEVELS:\n  LEVEL BABY:\n    TICK 0.15\n  END\nEND\n')
+        self.assertEqual(ast['tipo_juego'], 'SNAKE')
+
+    def test_errores_de_validacion(self):
+        casos = [
+            (fuente_tanks(jugador=''),
+             'exactamente una forma con TYPE PLAYER (hay 0)'),
+            (fuente_tanks(jugador='DEFINE SHAPE JUGADOR TYPE PLAYER: STATE 1: [1] END\n'
+                                  'DEFINE SHAPE OTRO TYPE PLAYER: STATE 1: [1] END'),
+             'exactamente una forma con TYPE PLAYER (hay 2)'),
+            (fuente_tanks(enemigo=''),
+             'al menos una forma con TYPE ENEMY'),
+            (fuente_tanks(balas='DEFINE SHAPE BALA_ENEMIGA TYPE BULLET OWNER ENEMY: STATE 1: [1] END'),
+             'una bala con TYPE BULLET OWNER PLAYER'),
+            (fuente_tanks(balas='DEFINE SHAPE BALA_JUGADOR TYPE BULLET OWNER PLAYER: STATE 1: [1] END'),
+             'una bala con TYPE BULLET OWNER ENEMY'),
+            (fuente_tanks(extra='DEFINE SHAPE SINDUENO TYPE BULLET: STATE 1: [1] END'),
+             "la bala 'SINDUENO' necesita OWNER PLAYER o OWNER ENEMY"),
+            (fuente_tanks(extra='DEFINE SHAPE PAREDON TYPE WALL: STATE 1: [1, 1, 1] [1, 0, 0] END'),
+             "la forma 'PAREDON' con TYPE WALL necesita una matriz cuadrada"),
+            (fuente_tanks(extra='DEFINE SHAPE RARO TYPE WALL: STATE 1: [1, 1] [1] END'),
+             "la forma 'RARO' tiene filas de distinto ancho"),
+            (fuente_tanks(extra='DEFINE SHAPE VACIO TYPE WALL: STATE 1: END'),
+             "la forma 'VACIO' tiene la matriz sin celdas encendidas"),
+            (fuente_tanks(extra='DEFINE SHAPE APAGADO TYPE WALL: STATE 1: [0, 0] [0, 0] END'),
+             "la forma 'APAGADO' tiene la matriz sin celdas encendidas"),
+            (fuente_tanks(extra='DEFINE SHAPE DURO TYPE ENEMY HP 0: STATE 1: [1] END'),
+             "el atributo HP de la forma 'DURO' debe ser mayor o igual a 1"),
+            (fuente_tanks(extra='DEFINE SHAPE X TYPE NAVE: STATE 1: [1] END'),
+             "TYPE 'NAVE' no valido"),
+            (fuente_tanks(extra='DEFINE SHAPE Y TYPE BULLET OWNER NADIE: STATE 1: [1] END'),
+             "OWNER 'NADIE' no valido"),
+        ]
+        for fuente, esperado in casos:
+            with self.assertRaises(Exception) as contexto:
+                compilar(fuente)
+            self.assertIn(esperado, str(contexto.exception))
+
+
 if __name__ == '__main__':
     unittest.main()
