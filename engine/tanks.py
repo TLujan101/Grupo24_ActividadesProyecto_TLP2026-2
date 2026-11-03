@@ -507,15 +507,45 @@ class Tanks(Game):
             self._dibujar_martillo(self.martillo[0], self.martillo[1])
         for enemigo in self.enemigos:
             datos = self._forma(enemigo['nombre']) or {}
-            matriz = self._rotar_matriz(self._matriz(datos), enemigo['direccion'])
-            self._dibujar_entidad(matriz, enemigo['x'], enemigo['y'], self._color_de(datos))
+            self._dibujar_tanque(enemigo['x'], enemigo['y'], enemigo['direccion'],
+                                 self._color_de(datos))
         for bala in self.balas:
             self._dibujar_bala(bala)
         if self.jugador:
             datos = self._forma(self.jugador['nombre']) or {}
-            self._dibujar_entidad(self._matriz_jugador(), self.jugador['x'],
-                                  self.jugador['y'], self._color_de(datos))
+            self._dibujar_tanque(self.jugador['x'], self.jugador['y'],
+                                 self.jugador['orientacion'], self._color_de(datos))
         self._actualizar_label_vida()
+
+    def _dibujar_tanque(self, x, y, direccion, color):
+        c = self.taman_celda
+        x1, y1 = x * c, y * c
+        # Todas las piezas permanecen dentro de la celda para que el dibujo
+        # siga siendo seguro cuando el tanque esta pegado al borde.
+        if direccion in ((1, 0), (-1, 0)):
+            orugas = ((0.12, 0.08, 0.88, 0.25),
+                      (0.12, 0.75, 0.88, 0.92))
+        else:
+            orugas = ((0.08, 0.12, 0.25, 0.88),
+                      (0.75, 0.12, 0.92, 0.88))
+        for xa, ya, xb, yb in orugas:
+            self.canvas.create_rectangle(x1 + c * xa, y1 + c * ya,
+                                         x1 + c * xb, y1 + c * yb,
+                                         fill=color, outline='')
+        self.canvas.create_rectangle(x1 + c * 0.27, y1 + c * 0.27,
+                                     x1 + c * 0.73, y1 + c * 0.73,
+                                     fill=color, outline='')
+        if direccion == (1, 0):
+            canon = (0.62, 0.44, 0.95, 0.56)
+        elif direccion == (-1, 0):
+            canon = (0.05, 0.44, 0.38, 0.56)
+        elif direccion == (0, 1):
+            canon = (0.44, 0.62, 0.56, 0.95)
+        else:
+            canon = (0.44, 0.05, 0.56, 0.38)
+        self.canvas.create_rectangle(x1 + c * canon[0], y1 + c * canon[1],
+                                     x1 + c * canon[2], y1 + c * canon[3],
+                                     fill=color, outline='')
 
     def _dibujar_entidad(self, matriz, x, y, color):
         for cx, cy in self._celdas(matriz, x, y):
@@ -523,12 +553,11 @@ class Tanks(Game):
                 self.dibujar_celda(cx, cy, color)
 
     def _dibujar_bala(self, bala):
-        self.dibujar_celda(bala['x'], bala['y'], bala['color'])
         c = self.taman_celda
         x1, y1 = bala['x'] * c, bala['y'] * c
-        self.canvas.create_rectangle(x1 + c * 0.30, y1 + c * 0.30,
-                                     x1 + c * 0.70, y1 + c * 0.70,
-                                     fill='#FFFFFF', outline='')
+        self.canvas.create_oval(x1 + c * 0.35, y1 + c * 0.35,
+                                x1 + c * 0.65, y1 + c * 0.65,
+                                fill='#FFFFFF', outline='')
 
     def _dibujar_martillo(self, x, y):
         pickups = self._formas_de_tipo('PICKUP')

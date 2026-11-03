@@ -13,7 +13,7 @@ RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 5)
 Además de COLOR/CHANCE/GEOMETRY, una forma puede declarar su rol y sus números:
 
 DEFINE SHAPE ENEMIGO_RAPIDO TYPE ENEMY HP 1 SPEED 4 FIRE_RATE 2 COLOR ORANGE:
-  STATE 1: [0,1,0] [1,1,1] [0,1,0] END
+  STATE 1: [1] END
 
 | Atributo | Aplica a | Significado | Default |
 |---|---|---|---|
@@ -53,12 +53,14 @@ forma con TYPE PLAYER (hay 2)". Snake y Tetris no pasan por esta validación.
 
 >>>>>> Formas, niveles PATRULLA y ASEDIO, tema y tres efectos.
 
-El .brick declara un tablero de 15x15: JUGADOR (cruz de 3x3, HP 3, verde), tres
+El .brick declara un tablero de 15x15: JUGADOR (1x1, HP 3, verde), tres
 enemigos (BÁSICO rojo, RÁPIDO naranja y DURO morado, con distinta SPEED y
 FIRE_RATE), las dos balas con su OWNER, MURO y MARTILLO. Los niveles PATRULLA
 (6 muros, tick 0.12) y ASEDIO (10 muros, tick 0.08) se eligen en el menú que ya
 existía. TANK_TEMA es una melodía propia de una voz con onda cuadrada y los
-efectos DISPARO/IMPACTO/MORIR usan el sintetizador existente.
+efectos DISPARO/IMPACTO/MORIR usan el sintetizador existente. La matriz 1x1 no
+elimina la silueta visual: cada tanque se dibuja con cuatro rectángulos
+(cuerpo, dos orugas y cañón), todos dentro de su celda.
 
 ------------------------------ NUEVO MOTOR (engine/tanks.py) ------------------------------
 

@@ -76,7 +76,7 @@ def datos_tanks(inicio=(2, 4)):
         'config': {'grid_size': [8, 8]},
         'shapes': {
             'JUGADOR': {'type': 'PLAYER', 'hp': 3, 'color': 'GREEN',
-                        'estados': [[[0, 1, 0], [1, 1, 1], [0, 1, 0]]]},
+                        'estados': [[[1]]]},
             'ENEMIGO': {'type': 'ENEMY', 'hp': 1, 'speed': 2, 'fire_rate': 3,
                         'color': 'RED', 'estados': [[[1]]]},
             'BALA_JUGADOR': {'type': 'BULLET', 'owner': 'PLAYER', 'damage': 1,
@@ -111,9 +111,9 @@ class TestTanks(unittest.TestCase):
         self.assertEqual(juego.jugador['orientacion'], (0, -1))
         juego.dibujar()
         self.assertEqual(juego.label_vida.opciones['text'], 'VIDA 3/3')
-        self.assertEqual(len(juego.canvas.rectangulos), 5)      # la cruz del jugador
-        self.assertEqual(set(c[1] for c in juego.canvas.rectangulos),
-                         set([Colores['GREEN']]))
+        self.assertEqual(len(juego.canvas.rectangulos), 4)      # cuerpo, 2 orugas y cañon
+        rellenos = set(c[1] for c in juego.canvas.rectangulos)
+        self.assertIn(Colores['GREEN'], rellenos)
 
         juego.manejar_tecla('RIGHT')
         self.assertEqual(juego.jugador['orientacion'], (1, 0))
@@ -125,7 +125,7 @@ class TestTanks(unittest.TestCase):
         juego.manejar_tecla('SPACE')
         self.assertEqual(len(juego.balas), 1)
         bala = juego.balas[0]
-        self.assertEqual((bala['x'], bala['y'], bala['dx'], bala['dy']), (5, 5, 1, 0))
+        self.assertEqual((bala['x'], bala['y'], bala['dx'], bala['dy']), (3, 4, 1, 0))
         self.assertEqual(bala['dueno'], 'PLAYER')
         self.assertEqual((bala['dano'], bala['color']), (1, Colores['CYAN']))
         self.assertEqual(juego.jugador['cooldown'], 0.3)
@@ -134,33 +134,33 @@ class TestTanks(unittest.TestCase):
         self.assertEqual(len(juego.balas), 1)
 
         juego.ejecutar_evento('ON_TICK')      # la bala avanza sola
-        self.assertEqual((juego.balas[0]['x'], juego.balas[0]['y']), (6, 5))
+        self.assertEqual((juego.balas[0]['x'], juego.balas[0]['y']), (4, 4))
 
     def test_el_jugador_no_atraviesa_muros_ni_bordes(self):
         juego = Tanks(datos_tanks())
-        juego.grid[5][5] = 1                  # (5,5) esta en la huella del paso a la derecha
+        juego.grid[4][3] = 1                  # (3,4) es el paso a la derecha
         juego.manejar_tecla('RIGHT')
         self.assertEqual(juego.jugador['x'], 2)
         self.assertEqual(juego.jugador['orientacion'], (1, 0))   # igual apunta
 
-        juego.jugador['x'] = 6                # pegado al borde derecho (8 columnas)
+        juego.jugador['x'] = 7                # pegado al borde derecho (8 columnas)
         juego.manejar_tecla('RIGHT')
-        self.assertEqual(juego.jugador['x'], 6)
+        self.assertEqual(juego.jugador['x'], 7)
 
     def test_la_bala_destruye_el_muro(self):
         juego = Tanks(datos_tanks())
         juego.jugador['orientacion'] = (1, 0)
-        juego.grid[5][6] = 1
+        juego.grid[4][4] = 1
         juego.manejar_tecla('SPACE')
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.balas, [])
-        self.assertEqual(juego.grid[5][6], 0)
+        self.assertEqual(juego.grid[4][4], 0)
         self.assertEqual(juego.puntuacion, 7)          # ON_BULLET_HIT_WALL corrio
 
     def test_bala_del_jugador_dana_y_mata(self):
         juego = Tanks(datos_tanks())
         juego.jugador['orientacion'] = (1, 0)
-        enemigo = agregar_enemigo(juego, 6, 5, hp=2)
+        enemigo = agregar_enemigo(juego, 4, 4, hp=2)
         juego.manejar_tecla('SPACE')
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(enemigo['hp'], 1)
@@ -176,7 +176,7 @@ class TestTanks(unittest.TestCase):
 
     def test_bala_enemiga_baja_la_vida_y_termina(self):
         juego = Tanks(datos_tanks())
-        bala = {'x': 3, 'y': 7, 'dx': 0, 'dy': -1, 'dueno': 'ENEMY',
+        bala = {'x': 2, 'y': 5, 'dx': 0, 'dy': -1, 'dueno': 'ENEMY',
                 'dano': 1, 'color': Colores['YELLOW']}
         juego.balas = [dict(bala)]
         juego.ejecutar_evento('ON_TICK')
@@ -197,7 +197,7 @@ class TestTanks(unittest.TestCase):
     def test_spawn_del_jugador_en_el_borde_se_recorta(self):
         # Review Focus 1: un spawn que no cabe dejaria la partida sin jugador.
         juego = Tanks(datos_tanks(inicio=(7, 7)))
-        self.assertEqual((juego.jugador['x'], juego.jugador['y']), (5, 5))
+        self.assertEqual((juego.jugador['x'], juego.jugador['y']), (7, 7))
         juego.dibujar()
         for (x1, y1, x2, y2), _ in juego.canvas.rectangulos:
             self.assertTrue(0 <= x1 < juego.ancho_canvas and 0 <= y1 < juego.alto_canvas)
@@ -234,7 +234,7 @@ class TestTanks(unittest.TestCase):
         # no un tick despues (cuando ya la habria atravesado).
         juego = Tanks(datos_tanks())
         juego.jugador['orientacion'] = (1, 0)
-        enemigo = agregar_enemigo(juego, 5, 5, hp=2)   # celda de la boca del cañon
+        enemigo = agregar_enemigo(juego, 3, 4, hp=2)   # celda de la boca del cañon
         juego.manejar_tecla('SPACE')
         self.assertEqual(enemigo['hp'], 1)
         self.assertEqual(juego.balas, [])
@@ -259,11 +259,11 @@ class TestTanksMundo(unittest.TestCase):
     def test_martillo_sana_y_reaparece(self):
         juego = Tanks(datos_tanks())
         juego.jugador['hp'] = 1
-        juego.martillo = (3, 5)          # dentro de la cruz del jugador
+        juego.martillo = (2, 4)          # en la celda del jugador
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.jugador['hp'], 2)
         self.assertIsNotNone(juego.martillo)
-        self.assertNotEqual(juego.martillo, (3, 5))
+        self.assertNotEqual(juego.martillo, (2, 4))
 
     def test_el_evento_puede_reubicar_el_martillo_sin_duplicarlo(self):
         datos = datos_tanks()
@@ -271,7 +271,7 @@ class TestTanksMundo(unittest.TestCase):
                                             accion('SPAWN', 'MARTILLO', [[7, 7]])]
         juego = Tanks(datos)
         juego.jugador['hp'] = 2
-        juego.martillo = (3, 5)
+        juego.martillo = (2, 4)
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.jugador['hp'], 3)
         self.assertEqual(juego.martillo, (7, 7))   # el motor no lo movio otra vez
@@ -282,17 +282,17 @@ class TestTanksMundo(unittest.TestCase):
         # ON_EAT_HAMMER nunca llegaba a dispararse en una partida real.
         juego = Tanks(datos_tanks())
         juego.jugador['hp'] = 1
-        juego.martillo = (5, 5)          # en la huella del paso a la derecha
+        juego.martillo = (3, 4)          # en la celda contigua
         juego.manejar_tecla('RIGHT')
         self.assertEqual((juego.jugador['x'], juego.jugador['y']), (3, 4))
         self.assertEqual(juego.jugador['hp'], 2)
-        self.assertNotEqual(juego.martillo, (5, 5))
+        self.assertNotEqual(juego.martillo, (3, 4))
 
     def test_bala_enemiga_a_quemarropa_dana_el_mismo_tick(self):
         # El enemigo queda pegado al jugador: su bala nace en una celda del
         # jugador y debe pegarle al nacer, no atravesarlo al avanzar.
-        juego = Tanks(datos_tanks())     # jugador 3x3 en (2,4): centro (3,5)
-        enemigo = agregar_enemigo(juego, 3, 3, direccion=(0, 1))
+        juego = Tanks(datos_tanks())     # jugador 1x1 en (2,4)
+        enemigo = agregar_enemigo(juego, 2, 3, direccion=(0, 1))
         enemigo['tiempo_disparo'] = 3.0  # listo para disparar, sin moverse
         juego._disparar_enemigos(0.0)
         self.assertEqual(juego.jugador['hp'], 2)
@@ -309,7 +309,7 @@ class TestTanksMundo(unittest.TestCase):
                 juego.grid[y][x] = 1
         for x, y in juego._celdas_jugador():
             juego.grid[y][x] = 0
-        juego.martillo = (3, 5)          # dentro de la cruz del jugador
+        juego.martillo = (2, 4)          # en la celda del jugador
         juego.ejecutar_evento('ON_TICK')
         self.assertEqual(juego.jugador['hp'], 2)
         self.assertIsNone(juego.martillo)
@@ -341,7 +341,7 @@ class TestTanksMundo(unittest.TestCase):
         self.assertEqual(enemigo['direccion'], (1, 0))   # cuatro giros, vuelve al inicio
 
     def test_enemigo_dispara_apuntado(self):
-        juego = Tanks(datos_tanks())     # jugador 3x3 en (2,4): centro (3,5)
+        juego = Tanks(datos_tanks())     # jugador 1x1 en (2,4)
         # Misma columna que el centro del jugador y baja por ella (si apuntara
         # a la derecha, el primer paso lo sacaria de la columna).
         agregar_enemigo(juego, 3, 0, direccion=(0, 1))

@@ -190,3 +190,7 @@ Reglas que el compilador verifica (solo para GAME_TYPE TANKS): exactamente una
 forma TYPE PLAYER, al menos una TYPE ENEMY, una bala OWNER PLAYER y otra
 OWNER ENEMY, matrices cuadradas para PLAYER/ENEMY/BOSS/WALL, filas del mismo
 ancho, al menos una celda encendida y HP/DAMAGE/SPEED/FIRE_RATE/HEAL >= 1.
+
+Las formas PLAYER y ENEMY se declaran con huella 1x1 (`STATE 1: [1]`). El
+motor las presenta dentro de esa celda con cuerpo, dos orugas y canon; la
+presentacion no cambia su huella ni sus colisiones.

@@ -4,21 +4,17 @@ GAME_GRID (15, 15)
 
 # --- Tanque del jugador: verde, 3 de resistencia ---
 DEFINE SHAPE JUGADOR TYPE PLAYER HP 3 COLOR GREEN:
-  STATE 1:
-    [0, 1, 0]
-    [1, 1, 1]
-    [0, 1, 0]
-END
+  STATE 1: [1] END
 
 # --- Enemigos: color, vida, celdas por segundo y cadencia de disparo ---
 DEFINE SHAPE ENEMIGO_BASICO TYPE ENEMY HP 1 SPEED 2 FIRE_RATE 3 COLOR RED:
-  STATE 1: [0,1,0] [1,1,1] [0,1,0] END
+  STATE 1: [1] END
 
 DEFINE SHAPE ENEMIGO_RAPIDO TYPE ENEMY HP 1 SPEED 4 FIRE_RATE 2 COLOR ORANGE:
-  STATE 1: [0,1,0] [1,1,1] [0,1,0] END
+  STATE 1: [1] END
 
 DEFINE SHAPE ENEMIGO_DURO TYPE ENEMY HP 2 SPEED 1 FIRE_RATE 4 COLOR PURPLE:
-  STATE 1: [0,1,0] [1,1,1] [0,1,0] END
+  STATE 1: [1] END
 
 # --- Municion: el dano viaja en la bala, no en el tanque ---
 DEFINE SHAPE BALA_JUGADOR TYPE BULLET OWNER PLAYER DAMAGE 1 COLOR CYAN:
