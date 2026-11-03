@@ -1,0 +1,109 @@
+---------------------------------------  CAMBIOS CON RESPECTO A SNAKE_REMAKE  ---------------------------------------
+
+RESUMEN DE APORTES POR INTEGRANTE (según rúbrica de la Actividad 5)
+- Miguel Angel Echeverri Isaza: (pendiente)
+- Tomas Lujan Colorado: (pendiente)
+- Nixon Daniel Lizcano Santana: (pendiente)
+- Andrés Felipe Bustamante López: (pendiente)
+
+------------------------------ NUEVA GRAMÁTICA (compiler.py, grammars/tanks.bnf) ------------------------------
+
+>>>>>> DEFINE SHAPE acepta atributos de entidad.
+
+Además de COLOR/CHANCE/GEOMETRY, una forma puede declarar su rol y sus números:
+
+DEFINE SHAPE ENEMIGO_RAPIDO TYPE ENEMY HP 1 SPEED 4 FIRE_RATE 2 COLOR ORANGE:
+  STATE 1: [0,1,0] [1,1,1] [0,1,0] END
+
+| Atributo | Aplica a | Significado | Default |
+|---|---|---|---|
+| TYPE | todas | PLAYER/ENEMY/BULLET/WALL/PICKUP/BOSS | ninguno (opcional) |
+| HP | tanques | impactos que aguanta | 3 jugador, 1 enemigo |
+| DAMAGE | balas | vida que quita por impacto | 1 |
+| SPEED | enemigos | celdas por segundo | 2 |
+| FIRE_RATE | enemigos | segundos entre disparos | 3 |
+| HEAL | pickups | vida que recupera | 1 |
+| OWNER | balas | PLAYER o ENEMY | obligatorio en BULLET |
+
+TYPE y OWNER aceptan los dos puntos opcionales (TYPE PLAYER y TYPE: PLAYER son
+lo mismo). Los defaults viven en el motor, no en el AST: un atributo ausente no
+se guarda, así un .brick viejo compila igual que antes.
+
+>>>>>> LEVELS acepta WALLS <numero>.
+
+LEVEL PATRULLA:
+  TICK 0.12
+  WALLS 6
+END
+
+WALLS es la cantidad de muros del nivel. Se generan al empezar la partida (no
+mientras se ve el menú de niveles) y se cortan en el total de celdas del
+tablero: WALLS 100 en 8x8 da 64.
+
+>>>>>> Validación semántica solo para GAME_TYPE TANKS.
+
+Al final del parse, y únicamente si el .brick declara GAME_TYPE TANKS, se exige:
+exactamente una forma TYPE PLAYER, al menos una TYPE ENEMY, una bala OWNER
+PLAYER y otra OWNER ENEMY, matrices cuadradas para PLAYER/ENEMY/BOSS/WALL, filas
+del mismo ancho, al menos una celda encendida y HP/DAMAGE/SPEED/FIRE_RATE/HEAL
+>= 1. Ejemplo de mensaje: "Error de sintaxis: TANKS necesita exactamente una
+forma con TYPE PLAYER (hay 2)". Snake y Tetris no pasan por esta validación.
+
+------------------------------ NUEVO JUEGO (games/tanks.brick) ------------------------------
+
+>>>>>> Formas, niveles PATRULLA y ASEDIO, tema y tres efectos.
+
+El .brick declara un tablero de 15x15: JUGADOR (cruz de 3x3, HP 3, verde), tres
+enemigos (BÁSICO rojo, RÁPIDO naranja y DURO morado, con distinta SPEED y
+FIRE_RATE), las dos balas con su OWNER, MURO y MARTILLO. Los niveles PATRULLA
+(6 muros, tick 0.12) y ASEDIO (10 muros, tick 0.08) se eligen en el menú que ya
+existía. TANK_TEMA es una melodía propia de una voz con onda cuadrada y los
+efectos DISPARO/IMPACTO/MORIR usan el sintetizador existente.
+
+------------------------------ NUEVO MOTOR (engine/tanks.py) ------------------------------
+
+>>>>>> Orden de un tick: balas, movimiento de enemigos, disparo de enemigos, ON TICK del .brick.
+
+Tanks.ejecutar_evento adelanta el mundo antes de despachar el evento del .brick,
+así el ON TICK ve el estado ya actualizado. El cooldown de disparo (0.3 s) se
+descuenta en ese mismo avance.
+
+>>>>>> Muros como celdas de self.grid.
+
+El motor no inventa una capa nueva: un muro es un 1 en self.grid, así que
+reutiliza el dibujo, los colores por forma y la colisión de Game. Las balas
+borran la celda y emiten ON_BULLET_HIT_WALL; los tanques no la atraviesan.
+
+>>>>>> IA: patrulla, giro de 90° al chocar y disparo apuntado por fila/columna.
+
+Cada enemigo acumula tiempo y avanza 1/SPEED celdas por segundo. Si el paso está
+bloqueado gira a la derecha hasta cuatro veces; si las cuatro están tapadas se
+queda quieto ese tick (sin bucle). Con el jugador en su misma fila o columna
+dispara por ese eje; si no, dispara hacia donde va. Sin pathfinding.
+
+>>>>>> Martillo: HEAL + reaparición con la guarda del evento.
+
+Pisar la celda del martillo emite ON_EAT_HAMMER (el .brick cura con HEAL PLAYER);
+si el evento no lo reubicó, el motor lo reubica en una celda libre. Sin celda
+libre queda en None y no se repite el evento cada tick.
+
+>>>>>> Entrada: SPACE -> ON_KEY_SHOOT en engine/game.py.
+
+Las flechas ya disparaban ON_KEY_*; ahora Espacio dispara ON_KEY_SHOOT. Los
+juegos clásicos no declaran el evento y la tecla no hace nada en ellos.
+
+------------------------------ CALIDAD ------------------------------
+
+>>>>>> tests/test_tanks.py (10 puntos del spec §7) y grupo propio en el CI.
+
+Cubre el .brick real, el spawn del jugador (incluido el recorte en el borde), el
+disparo con cooldown, la destrucción de muros, el daño y la muerte de enemigos y
+del jugador, la IA (moverse, girar, quedarse quieto, apuntar), los muros por
+nivel y sus límites, el martillo sin celda libre y un fuzz de 300 teclas. El
+workflow de GitHub corre tests.test_tanks como grupo aparte.
+
+>>>>>> Retrocompatibilidad: Snake y Tetris sin cambios; TEMA_NYAN intacto.
+
+La validación nueva solo corre en TANKS y los atributos ausentes no se guardan,
+así que los .brick clásicos compilan al mismo AST. games/tanks.brick no entra en
+juegos_clasicos (su tipo es TANKS) y el md5 dorado de TEMA_NYAN no se tocó.

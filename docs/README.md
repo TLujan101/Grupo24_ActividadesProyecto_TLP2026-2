@@ -4,9 +4,9 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 ## Avance del Proyecto Final
 - [x] Actividad 1: Equipo (13 sep)
 - [x] Actividad 2: Entorno (22 sep)
-- [ ] Actividad 3: Tetris+ (06 oct)
-- [ ] Actividad 4: Snake+ (27 oct)
-- [ ] Actividad 5: Tanks (17 nov)
+- [x] Actividad 3: Tetris+ (06 oct)
+- [x] Actividad 4: Snake+ (27 oct)
+- [x] Actividad 5: Tanks (17 nov)
 - [ ] Actividad 6: Integración (07 dic)
 
 ## Estructura del repositorio
@@ -27,10 +27,12 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 
 ## Documentación (`docs/`, en orden de lectura)
 1. Este índice (`README.md`): panorama del proyecto.
-2. [`Guia-BrickScript.txt`](Guia-BrickScript.txt): guía del lenguaje (sintaxis de Tetris y Snake, colores, CHANCE, eventos extendidos).
+2. [`Guia-BrickScript.txt`](Guia-BrickScript.txt): guía del lenguaje (sintaxis de Tetris, Snake y Tanks, colores, CHANCE, eventos extendidos).
 3. [`Instalacion.txt`](Instalacion.txt): requisitos (Python 2.7), estructura y solución de problemas.
 4. [`Musica-BrickScript.md`](Musica-BrickScript.md): cómo funciona la música programada en el `.brick`.
-5. [`cambios/`](cambios/): registro de cambios de la Actividad 3 (formas, motor, scripts `jugar`).
+5. [`cambios/`](cambios/): registro de cambios de las actividades 3, 4 y 5
+   ([Tetris+](cambios/tetris_reborn_changes.txt), [Snake+](cambios/snake_evolved_changes.txt),
+   [Tanks](cambios/tanks_changes.txt)).
 
 ## Tests
 Cada PR hacia `main` corre [`../.github/workflows/tests.yml`](../.github/workflows/tests.yml), que verifica:

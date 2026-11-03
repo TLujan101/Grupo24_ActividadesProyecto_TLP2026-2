@@ -146,3 +146,47 @@ Acciones comunes:
 * INCREASE_SCORE [PUNTOS]
 * GROW PLAYER [CANTIDAD]
 * GAME_OVER
+
+--- SINTAXIS PARA TANKS (Actividad 5A) ---
+
+GAME_TYPE TANKS. El jugador es unico y tiene puntos de vida; los enemigos
+declaran color, vida, velocidad y cadencia; las balas llevan su propio dano.
+
+Eventos disponibles: ON START, ON TICK, ON KEY_UP, ON KEY_DOWN, ON KEY_LEFT,
+ON KEY_RIGHT, ON KEY_SHOOT, ON PLAYER_HIT, ON EAT_HAMMER, ON ENEMY_DEFEATED,
+ON BULLET_HIT_WALL, ON GAME_OVER. ON TARGET_SCORE se acepta pero todavia no se
+emite (es de la Actividad 5B).
+
+Atributos de DEFINE SHAPE (todos opcionales salvo TYPE):
+    TYPE PLAYER|ENEMY|BULLET|WALL|PICKUP|BOSS   rol de la forma
+    HP <n>          impactos que aguanta (jugador 3, enemigo 1 por defecto)
+    DAMAGE <n>      vida que quita la bala por impacto (1 por defecto)
+    SPEED <n>       celdas por segundo del enemigo (2 por defecto)
+    FIRE_RATE <n>   segundos entre disparos (3 por defecto)
+    HEAL <n>        vida que recupera el martillo (1 por defecto)
+    OWNER PLAYER|ENEMY   quien dispara la bala (obligatorio en BULLET)
+    COLOR <color>   color de la matriz (CYAN por defecto)
+TYPE y OWNER aceptan tambien la forma TYPE: PLAYER.
+
+Acciones:
+* SPAWN <FORMA> AT (X, Y) | SPAWN <FORMA> AT RANDOM
+  (SPAWN PLAYER y SPAWN ENEMY nombran el rol: PLAYER es la unica forma de ese
+  tipo y ENEMY cae en la primera forma enemiga en orden alfabetico)
+* MOVE PLAYER [UP | DOWN | LEFT | RIGHT]   orienta el canon y avanza 1 celda
+* SHOOT PLAYER            dispara si el canon no esta en enfriamiento (0.3 s)
+* HEAL PLAYER             cura con el HEAL de la forma TYPE PICKUP
+* INCREASE_SCORE / DECREASE_SCORE / RESET_SCORE / GAME_OVER
+* PLAY_MUSIC / PLAY_EFFECT / STOP_MUSIC
+
+Modificador de nivel: WALLS <numero> genera esa cantidad de muros al empezar
+la partida. Los muros son celdas del tablero: las balas los destruyen y los
+tanques no los atraviesan.
+
+El motor emite ON PLAYER_HIT, ON ENEMY_DEFEATED, ON EAT_HAMMER,
+ON BULLET_HIT_WALL y ON GAME_OVER (una sola vez). Las flechas mueven y
+Espacio dispara; en Snake y Tetris Espacio no hace nada.
+
+Reglas que el compilador verifica (solo para GAME_TYPE TANKS): exactamente una
+forma TYPE PLAYER, al menos una TYPE ENEMY, una bala OWNER PLAYER y otra
+OWNER ENEMY, matrices cuadradas para PLAYER/ENEMY/BOSS/WALL, filas del mismo
+ancho, al menos una celda encendida y HP/DAMAGE/SPEED/FIRE_RATE/HEAL >= 1.

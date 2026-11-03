@@ -67,6 +67,8 @@ jobs:
             modulo: tests.test_tetris
           - grupo: Snake
             modulo: tests.test_snake
+          - grupo: Tanks
+            modulo: tests.test_tanks
           - grupo: Integracion (compilador + runtime)
             modulo: tests.test_juegos
     steps:
