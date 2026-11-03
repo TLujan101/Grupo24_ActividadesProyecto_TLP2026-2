@@ -1,0 +1,81 @@
+<programa>         ::= <tipo_juego> <grid> <definiciones> <opcional_niveles> <eventos>
+
+<tipo_juego>       ::= "GAME_TYPE" "TANKS"
+<grid>             ::= "GAME_GRID" "(" <numero> "," <numero> ")"
+<definiciones>     ::= <definicion> | <definicion> <definiciones>
+<opcional_niveles> ::= "" | <niveles>
+<definicion>       ::= <definicion_shape> | <definicion_cancion> | <definicion_efecto>
+
+<definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <atributos> ":" <estados> "END"
+<atributos>        ::= "" | <atributo> <atributos>
+<atributo>         ::= "TYPE" ":"? <tipo_entidad>
+                     | "HP" <numero> | "DAMAGE" <numero>
+                     | "SPEED" <numero> | "FIRE_RATE" <numero>
+                     | "HEAL" <numero> | "OWNER" ":"? <bando>
+                     | "COLOR" <identificador> | "CHANCE" <numero> | "GEOMETRY" <identificador>
+<tipo_entidad>     ::= "PLAYER" | "ENEMY" | "BULLET" | "WALL" | "PICKUP" | "BOSS"
+<bando>            ::= "PLAYER" | "ENEMY"
+<estados>          ::= <estado> | <estado> <estados>
+<estado>           ::= "STATE" <numero> ":" <matriz>
+<matriz>           ::= <fila> | <fila> <matriz>
+<fila>             ::= "[" <valores_fila> "]"
+<valores_fila>     ::= <numero> | <numero> "," <valores_fila>
+
+<niveles>            ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
+<elegir_nivel>       ::= "" | "START" ":" <identificador>
+<definiciones_nivel>::= <definicion_nivel> | <definicion_nivel> <definiciones_nivel>
+<definicion_nivel>   ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
+<modificadores_nivel>::= "" | <modificador_nivel> <modificadores_nivel>
+<modificador_nivel>  ::= "TICK" <real> | "MUSIC" <identificador> | "WALLS" <numero>
+
+<eventos>          ::= <evento> | <evento> <eventos>
+<evento>           ::= "ON" <nombre_evento> ":" <acciones_tanque> "END"
+<nombre_evento>    ::= "START" | "TICK"
+                     | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT" | "KEY_SHOOT"
+                     | "PLAYER_HIT" | "EAT_HAMMER" | "ENEMY_DEFEATED"
+                     | "BULLET_HIT_WALL" | "GAME_OVER"
+                     | "TARGET_SCORE"
+
+<acciones_tanque>  ::= "" | <accion_tanque> <acciones_tanque>
+<accion_tanque>    ::= "SPAWN" <identificador> "AT" <destino>
+                     | "MOVE" "PLAYER" <direccion>
+                     | "SHOOT" "PLAYER" | "HEAL" "PLAYER"
+                     | "INCREASE_SCORE" <numero> | "DECREASE_SCORE" <numero>
+                     | "RESET_SCORE" | "GAME_OVER"
+                     | "PLAY_MUSIC" <identificador> | "PLAY_EFFECT" <identificador>
+                     | "STOP_MUSIC"
+<destino>          ::= "RANDOM" | "(" <numero> "," <numero> ")"
+<direccion>        ::= "UP" | "DOWN" | "LEFT" | "RIGHT"
+
+<definicion_cancion> ::= "DEFINE" "SONG" <identificador> <extras_musica> ":" <cuerpo_cancion> "END"
+<cuerpo_cancion>     ::= <notas> | <voces>
+<voces>              ::= <voz> <voz> | <voz> <voces>
+<voz>                ::= "VOICE" <numero> ":" <notas> "END"
+<extras_musica>      ::= "" | "WAVE" <onda>
+<onda>               ::= "SINE" | "SQUARE"
+<definicion_efecto>  ::= "DEFINE" "EFFECT" <identificador> ":" <notas> "END"
+<notas>              ::= <nota> | <silencio> | <nota> <notas> | <silencio> <notas>
+<nota>               ::= "NOTE" <nombre_nota> <numero>
+<silencio>           ::= "REST" <numero>
+<nombre_nota>        ::= <letra_a_g> "#"? <digito>
+<letra_a_g>          ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
+
+<identificador> ::= <letra> | <letra> <identificador>
+<numero>        ::= <digito> | <digito> <numero>
+<real>          ::= <numero> | <numero> "." <numero>
+<letra>         ::= "A"..."Z" | "_"
+<digito>        ::= "0"..."9"
+
+* --- Diferencias con tetris.bnf / snake.bnf ---
+*
+* - DEFINE SHAPE acepta los atributos de la Actividad 5: TYPE, HP, DAMAGE,
+*   SPEED, FIRE_RATE, HEAL y OWNER, ademas de COLOR, CHANCE y GEOMETRY.
+* - <tipo_entidad> es PLAYER | ENEMY | BULLET | WALL | PICKUP | BOSS y
+*   <bando> es PLAYER | ENEMY. TYPE y OWNER admiten ":" opcional.
+* - LEVELS agrega el modificador WALLS <numero> (celdas de muro del nivel).
+* - ON TARGET_SCORE se parsea desde ya, pero nada lo emite: es de la 5B.
+* - TARGET_SCORE, PLAYER_HIT, EAT_HAMMER, ENEMY_DEFEATED y BULLET_HIT_WALL
+*   son tokens PALABRA del lexer compartido: el parser los acepta sin cambios.
+* - La validacion de estas reglas (una sola forma PLAYER, al menos una ENEMY,
+*   bala de cada bando, matrices cuadradas) vive en el compilador y solo se
+*   aplica a GAME_TYPE TANKS.
