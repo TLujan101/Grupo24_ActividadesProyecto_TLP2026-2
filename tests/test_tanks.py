@@ -202,6 +202,25 @@ class TestTanks(unittest.TestCase):
         for (x1, y1, x2, y2), _ in juego.canvas.rectangulos:
             self.assertTrue(0 <= x1 < juego.ancho_canvas and 0 <= y1 < juego.alto_canvas)
 
+    def test_spawn_player_nombra_el_rol_no_la_forma(self):
+        # El spec escribe "SPAWN PLAYER AT (x, y)" aunque la forma se llame
+        # JUGADOR: PLAYER es el rol, como en MOVE/SHOOT/HEAL PLAYER.
+        datos = datos_tanks()
+        datos['events']['ON_START'] = [accion('SPAWN', 'PLAYER', [[2, 4]])]
+        juego = Tanks(datos)
+        self.assertIsNotNone(juego.jugador)
+        self.assertEqual(juego.jugador['nombre'], 'JUGADOR')
+        self.assertEqual((juego.jugador['x'], juego.jugador['y']), (2, 4))
+
+    def test_spawn_enemy_nombra_el_rol_y_usa_la_primera_forma(self):
+        # Con varios tipos de enemigo, "SPAWN ENEMY" cae en la primera forma en
+        # orden estable (el .brick real usa el nombre explicito para elegir).
+        datos = datos_tanks()
+        datos['events']['ON_START'] = [accion('SPAWN', 'ENEMY', [[6, 6]])]
+        juego = Tanks(datos)
+        self.assertEqual([e['nombre'] for e in juego.enemigos], ['ENEMIGO'])
+        self.assertEqual((juego.enemigos[0]['x'], juego.enemigos[0]['y']), (6, 6))
+
     def test_disparo_contra_el_borde_no_crea_bala(self):
         # Review Focus 4: sin cooldown, apuntar afuera permitiria rafagas.
         juego = Tanks(datos_tanks())

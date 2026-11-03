@@ -184,6 +184,14 @@ class Tanks(Game):
 
     def _spawn_forma(self, nombre, accion):
         datos = self._forma(nombre)
+        if not isinstance(datos, dict) and nombre in ('PLAYER', 'ENEMY'):
+            # "SPAWN PLAYER" nombra el rol, no la forma (el .brick real lo
+            # escribe asi). PLAYER es unico; ENEMY cae en la primera forma
+            # enemiga en orden estable, y el .brick puede usar el nombre
+            # explicito para elegir tipo.
+            formas = self._formas_de_tipo(nombre)
+            if formas:
+                nombre, datos = formas[0]
         if not isinstance(datos, dict):
             return
         tipo = datos.get('type')
