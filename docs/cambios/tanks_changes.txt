@@ -40,6 +40,18 @@ WALLS es la cantidad de muros del nivel. Se generan al empezar la partida (no
 mientras se ve el menú de niveles) y se cortan en el total de celdas del
 tablero: WALLS 100 en 8x8 da 64.
 
+>>>>>> DEFINE BOSS es un bloque propio (además de TYPE BOSS).
+
+DEFINE BOSS JEFE HP 20 DAMAGE 2 COLOR MAGENTA:
+  STATE 1: [
+    [1, 1],
+    [1, 1]
+  ] END
+
+El compilador lo guarda como una forma con type BOSS. ON TARGET_SCORE 2000:
+guarda el umbral en config.target_score. TARGET_SCORE también es modificador
+de nivel.
+
 >>>>>> Validación semántica solo para GAME_TYPE TANKS.
 
 Al final del parse, y únicamente si el .brick declara GAME_TYPE TANKS, se exige:
@@ -53,14 +65,16 @@ forma con TYPE PLAYER (hay 2)". Snake y Tetris no pasan por esta validación.
 
 >>>>>> Formas, niveles PATRULLA y ASEDIO, tema y tres efectos.
 
-El .brick declara un tablero de 15x15: JUGADOR (1x1, HP 3, verde), tres
-enemigos (BÁSICO rojo, RÁPIDO naranja y DURO morado, con distinta SPEED y
-FIRE_RATE), las dos balas con su OWNER, MURO y MARTILLO. Los niveles PATRULLA
-(6 muros, tick 0.12) y ASEDIO (10 muros, tick 0.08) se eligen en el menú que ya
-existía. TANK_TEMA es una melodía propia de una voz con onda cuadrada y los
-efectos DISPARO/IMPACTO/MORIR usan el sintetizador existente. La matriz 1x1 no
-elimina la silueta visual: cada tanque se dibuja con cuatro rectángulos
-(cuerpo, dos orugas y cañón), todos dentro de su celda.
+El .brick declara un tablero de 15x15: JUGADOR (TYPE: PLAYER, 1x1, HP 3,
+verde), tres enemigos (BÁSICO rojo HP 1, RÁPIDO naranja SPEED 4, DURO morado
+HP 2), las dos balas con su OWNER, MURO, MARTILLO (HEAL 1) y el bloque
+DEFINE BOSS JEFE (fortaleza 2x2, HP 15, DAMAGE 2, PURPLE). Los niveles
+PATRULLA (6 muros, tick 0.12) y ASEDIO (10 muros, tick 0.08) llevan
+TARGET_SCORE 2000. TANK_TEMA es una melodía propia de una voz con onda
+cuadrada y los efectos DISPARO/IMPACTO/MORIR usan el sintetizador existente.
+La matriz 1x1 no elimina la silueta visual: cada tanque común se dibuja con
+cuatro rectángulos (cuerpo, dos orugas y cañón) dentro de su celda. El jefe
+ocupa de verdad 2x2 celdas.
 
 ------------------------------ NUEVO MOTOR (engine/tanks.py) ------------------------------
 
@@ -83,6 +97,10 @@ bloqueado gira a la derecha hasta cuatro veces; si las cuatro están tapadas se
 queda quieto ese tick (sin bucle). Con el jugador en su misma fila o columna
 dispara por ese eje; si no, dispara hacia donde va. Sin pathfinding.
 
+>>>>>> Spawning aleatorio y control de saturación.
+
+El motor procesa el rol genérico ENEMY mediante random.choice para elegir de forma aleatoria entre las variantes de enemigos (Básico, Rápido, Duro) en cada reaparición, aplicando un límite de población de máximo 5 enemigos simultáneos en pantalla para prevenir saturación.
+
 >>>>>> Martillo: HEAL + reaparición con la guarda del evento.
 
 Pisar la celda del martillo emite ON_EAT_HAMMER (el .brick cura con HEAL PLAYER);
@@ -94,6 +112,15 @@ libre queda en None y no se repite el evento cada tick.
 Las flechas ya disparaban ON_KEY_*; ahora Espacio dispara ON_KEY_SHOOT. Los
 juegos clásicos no declaran el evento y la tecla no hace nada en ellos.
 
+>>>>>> Jefe final (2x2), barras de vida y colisión por área.
+
+Al cruzar el umbral de los 2000 puntos, el motor retira a los tanques comunes e invoca al Jefe 2x2. Cuenta con matriz cuadrada para su renderizado, detección de colisiones ampliada por área (_enemigo_en) para registrar impactos en cualquier celda de su estructura 2x2, barras de vida dinámicas para entidades con HP superior a 1, disparos de mayor daño y múltiples impactos necesarios antes de la victoria.
+
+>>>>>> MOVE FORWARD (Actividad 5D).
+
+Las balas avanzan solas una celda por tick. ON TICK: MOVE FORWARD END en el
+.brick documenta esa regla; el motor no duplica el paso.
+
 ------------------------------ CALIDAD ------------------------------
 
 >>>>>> tests/test_tanks.py (10 puntos del spec §7) y grupo propio en el CI.
@@ -101,8 +128,9 @@ juegos clásicos no declaran el evento y la tecla no hace nada en ellos.
 Cubre el .brick real, el spawn del jugador (incluido el recorte en el borde), el
 disparo con cooldown, la destrucción de muros, el daño y la muerte de enemigos y
 del jugador, la IA (moverse, girar, quedarse quieto, apuntar), los muros por
-nivel y sus límites, el martillo sin celda libre y un fuzz de 300 teclas. El
-workflow de GitHub corre tests.test_tanks como grupo aparte.
+nivel y sus límites, el martillo sin celda libre, el umbral TARGET_SCORE de 2000 puntos,
+el jefe grande 2x2 (varios impactos y más daño) y un fuzz de 300 teclas. El workflow
+de GitHub corre tests.test_tanks como grupo aparte.
 
 >>>>>> Retrocompatibilidad: Snake y Tetris sin cambios; TEMA_NYAN intacto.
 
