@@ -4,9 +4,10 @@
 <grid>             ::= "GAME_GRID" "(" <numero> "," <numero> ")"
 <definiciones>     ::= <definicion> | <definicion> <definiciones>
 <opcional_niveles> ::= "" | <niveles>
-<definicion>       ::= <definicion_shape> | <definicion_cancion> | <definicion_efecto>
+<definicion>       ::= <definicion_shape> | <definicion_jefe> | <definicion_cancion> | <definicion_efecto>
 
 <definicion_shape> ::= "DEFINE" "SHAPE" <identificador> <atributos> ":" <estados> "END"
+<definicion_jefe>  ::= "DEFINE" "BOSS" <identificador> <atributos> ":" <estados> "END"
 <atributos>        ::= "" | <atributo> <atributos>
 <atributo>         ::= "TYPE" ":"? <tipo_entidad>
                      | "HP" <numero> | "DAMAGE" <numero>
@@ -15,11 +16,11 @@
                      | "COLOR" <identificador> | "CHANCE" <numero> | "GEOMETRY" <identificador>
 <tipo_entidad>     ::= "PLAYER" | "ENEMY" | "BULLET" | "WALL" | "PICKUP" | "BOSS"
 <bando>            ::= "PLAYER" | "ENEMY"
-<estados>          ::= <estado> | <estado> <estados>
-<estado>           ::= "STATE" <numero> ":" <matriz>
-<matriz>           ::= <fila> | <fila> <matriz>
-<fila>             ::= "[" <valores_fila> "]"
-<valores_fila>     ::= <numero> | <numero> "," <valores_fila>
+<estados>       ::= <estado> | <estado> <estados>
+<estado>        ::= "STATE" <numero> ":" "[" <matriz_filas> "]"
+<matriz_filas>  ::= <fila> | <fila> "," <matriz_filas>
+<fila>          ::= "[" <valores_fila> "]"
+<valores_fila>  ::= <numero> | <numero> "," <valores_fila>
 
 <niveles>            ::= "LEVELS" ":" <elegir_nivel> <definiciones_nivel> "END"
 <elegir_nivel>       ::= "" | "START" ":" <identificador>
@@ -27,18 +28,20 @@
 <definicion_nivel>   ::= "LEVEL" <identificador> ":" <modificadores_nivel> "END"
 <modificadores_nivel>::= "" | <modificador_nivel> <modificadores_nivel>
 <modificador_nivel>  ::= "TICK" <real> | "MUSIC" <identificador> | "WALLS" <numero>
+                     | "TARGET_SCORE" <numero>
 
 <eventos>          ::= <evento> | <evento> <eventos>
 <evento>           ::= "ON" <nombre_evento> ":" <acciones_tanque> "END"
 <nombre_evento>    ::= "START" | "TICK"
                      | "KEY_UP" | "KEY_DOWN" | "KEY_LEFT" | "KEY_RIGHT" | "KEY_SHOOT"
                      | "PLAYER_HIT" | "EAT_HAMMER" | "ENEMY_DEFEATED"
-                     | "BULLET_HIT_WALL" | "GAME_OVER"
-                     | "TARGET_SCORE"
+                     | "BULLET_HIT_WALL" | "GAME_OVER" | "BOSS_DEFEATED"
+                     | "TARGET_SCORE" | "TARGET_SCORE" <numero>
 
 <acciones_tanque>  ::= "" | <accion_tanque> <acciones_tanque>
 <accion_tanque>    ::= "SPAWN" <identificador> "AT" <destino>
                      | "MOVE" "PLAYER" <direccion>
+                     | "MOVE" "FORWARD"
                      | "SHOOT" "PLAYER" | "HEAL" "PLAYER"
                      | "INCREASE_SCORE" <numero> | "DECREASE_SCORE" <numero>
                      | "RESET_SCORE" | "GAME_OVER"
@@ -73,9 +76,13 @@
 * - <tipo_entidad> es PLAYER | ENEMY | BULLET | WALL | PICKUP | BOSS y
 *   <bando> es PLAYER | ENEMY. TYPE y OWNER admiten ":" opcional.
 * - LEVELS agrega el modificador WALLS <numero> (celdas de muro del nivel).
-* - ON TARGET_SCORE se parsea desde ya, pero nada lo emite: es de la 5B.
-* - TARGET_SCORE, PLAYER_HIT, EAT_HAMMER, ENEMY_DEFEATED y BULLET_HIT_WALL
-*   son tokens PALABRA del lexer compartido: el parser los acepta sin cambios.
-* - La validacion de estas reglas (una sola forma PLAYER, al menos una ENEMY,
-*   bala de cada bando, matrices cuadradas) vive en el compilador y solo se
-*   aplica a GAME_TYPE TANKS.
+* - DEFINE BOSS declara el jefe final (matriz grande, COLOR y HP). Es un
+*   atajo de DEFINE SHAPE ... TYPE BOSS; el compilador le pone TYPE BOSS.
+* - ON TARGET_SCORE [numero] lo emite el motor al cruzar el umbral (1000
+*   por defecto) y el .brick hace SPAWN BOSS. TARGET_SCORE tambien es
+*   modificador de nivel.
+* - MOVE FORWARD documenta el avance automatico de las balas cada tick.
+* - TARGET_SCORE, PLAYER_HIT, EAT_HAMMER, ENEMY_DEFEATED, BOSS_DEFEATED y
+*   BULLET_HIT_WALL son tokens PALABRA del lexer compartido.
+* - La validacion (una sola forma PLAYER, al menos una ENEMY, bala de cada
+*   bando, matrices cuadradas) vive en el compilador y solo aplica a TANKS.
