@@ -85,6 +85,10 @@ class Parser:
                     self.parsear_cancion()
                 elif siguiente == 'EFFECT':
                     self.parsear_efecto()
+                elif siguiente == 'BOSS':
+                    # Bloque dedicado de la Actividad 5B: DEFINE BOSS ... END
+                    # es un DEFINE SHAPE con TYPE BOSS ya puesto.
+                    self.parsear_shape(forzar_tipo='BOSS')
                 else:
                     self.parsear_shape()
             elif token_actual == 'LEVELS':
@@ -204,9 +208,12 @@ class Parser:
         self.consumir(')')
         self.ast['config']['grid_size'] = [ancho, alto]
 
-    def parsear_shape(self):
+    def parsear_shape(self, forzar_tipo=None):
             self.consumir('DEFINE')
-            self.consumir('SHAPE')
+            if forzar_tipo:
+                self.consumir(forzar_tipo)
+            else:
+                self.consumir('SHAPE')
             nombre_shape = self.consumir()
             datos = {'geometry': 'RECT', 'color': 'CYAN', 'chance': 10}
 
@@ -251,6 +258,8 @@ class Parser:
                 estados.append(matriz)
             self.consumir('END')
             datos['estados'] = estados
+            if forzar_tipo:
+                datos['type'] = forzar_tipo
             self.ast['shapes'][nombre_shape] = datos
     # NIVELES
     # --------
@@ -259,7 +268,7 @@ class Parser:
     # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
     # que la tecla 2 elegiria un nivel arbitrario.
 
-    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero'), 'WALLS': ('walls', 'numero')}
+    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero'), 'WALLS': ('walls', 'numero'), 'TARGET_SCORE': ('target_score', 'numero')}
 
     # Atributos de DEFINE SHAPE. COLOR/CHANCE/GEOMETRY ya existian; el resto es
     # de la Actividad 5. La tabla guarda el tipo del valor para saber si se lee
@@ -473,7 +482,18 @@ class Parser:
     
     def parsear_evento(self):
         self.consumir('ON')
-        nombre_evento = 'ON_' + self.consumir()
+        nombre = self.consumir()
+        # ON TARGET_SCORE 1000: guarda el umbral en config; ON TARGET_SCORE:
+        # usa 1000 por defecto en el motor.
+        if nombre == 'TARGET_SCORE' and self.ver() not in (':', None):
+            token = self.ver()
+            try:
+                int(token)
+            except (ValueError, TypeError):
+                token = None
+            if token is not None:
+                self.ast['config']['target_score'] = self.consumir_numero()
+        nombre_evento = 'ON_' + nombre
         self.consumir(':')
         acciones = []
         while self.ver() not in ('END', None):
