@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-# tanks.py --- Juego TANKS (GAME_TYPE TANKS). Actividad 5, seccion A.
+# tanks.py --- Juego TANKS (GAME_TYPE TANKS). Actividad 5, secciones A-D.
 #
 # El .brick declara formas (TYPE, HP, DAMAGE, SPEED, FIRE_RATE, HEAL, OWNER) y
-# eventos; este motor no compara nombres de forma ni de nivel. Los muros son
-# celdas de self.grid, asi que reutilizan el dibujo y la colision de Game.
+# el bloque DEFINE BOSS; este motor no compara nombres de forma ni de nivel.
+# Los muros son celdas de self.grid, asi que reutilizan el dibujo y la colision
+# de Game. Las balas avanzan solas cada tick (MOVE FORWARD).
 
 import random
 import Tkinter as tk
@@ -32,6 +33,9 @@ class Tanks(Game):
         self.jugador = None
         self.enemigos = []
         self.balas = []
+        self.explosiones = []
+        self.jefe_spawned = False
+        self.victoria = False
         self.martillo = None
         self.velocidad_gravedad = TICK_POR_DEFECTO
 
@@ -113,7 +117,7 @@ class Tanks(Game):
         return (x + lado // 2, y - 1)
 
     # OCUPACION
-    # ---------
+    # --------- 
 
     def _celdas_jugador(self):
         if not self.jugador:
@@ -179,6 +183,10 @@ class Tanks(Game):
             self._spawn_forma(objeto, accion)
         elif verbo == 'MOVE' and objeto == 'PLAYER':
             self._mover_jugador(accion)
+        elif verbo == 'MOVE' and objeto == 'FORWARD':
+            # La gramatica documenta MOVE FORWARD; el motor ya avanza las
+            # balas en cada ON_TICK, asi que aqui no se duplica el paso.
+            return
         elif verbo == 'SHOOT' and objeto == 'PLAYER':
             self._disparar_jugador()
         elif verbo == 'HEAL' and objeto == 'PLAYER':
@@ -186,14 +194,13 @@ class Tanks(Game):
 
     def _spawn_forma(self, nombre, accion):
         datos = self._forma(nombre)
-        if not isinstance(datos, dict) and nombre in ('PLAYER', 'ENEMY'):
-            # "SPAWN PLAYER" nombra el rol, no la forma (el .brick real lo
-            # escribe asi). PLAYER es unico; ENEMY cae en la primera forma
-            # enemiga en orden estable, y el .brick puede usar el nombre
-            # explicito para elegir tipo.
+        if not isinstance(datos, dict) and nombre in ('PLAYER', 'ENEMY', 'BOSS'):
+            # "SPAWN PLAYER", "SPAWN ENEMY" o "SPAWN BOSS" nombran el rol, no una forma fija.
             formas = self._formas_de_tipo(nombre)
             if formas:
-                nombre, datos = formas[0]
+                # Si es ENEMY o BOSS, elegimos aleatoriamente si hay múltiples variantes; PLAYER es único.
+                nombre, datos = random.choice(formas) if nombre in ('ENEMY', 'BOSS') else formas[0]
+
         if not isinstance(datos, dict):
             return
         tipo = datos.get('type')
@@ -202,21 +209,30 @@ class Tanks(Game):
             return
         if tipo == 'BULLET':
             return              # las balas solo nacen de SHOOT
+
+        # Tras el jefe, la partida es el duelo: no reaparecen enemigos comunes.
+        # Antes, se corta en 5 para no saturar el tablero de 15x15.
+        if tipo == 'ENEMY' and (self.jefe_spawned or self._contar_enemigos_comunes() >= 5):
+            return
+
+        # Player, enemigo y jefe (BOSS) pueden ignorar muros bajo su matriz al spawnear
+        ignorar = tipo in ('PLAYER', 'ENEMY', 'BOSS')
+
         matriz = self._matriz(datos)
         params = (accion or {}).get('params', [])
         if params and params[0] != 'RANDOM':
             coords = params[0]
             ancla = (int(coords[0]), int(coords[1]))
         else:
-            ancla = self._ancla_libre(matriz)
+            ancla = self._ancla_libre(matriz, ignorar_muros=ignorar)
+
         if ancla is None:
             return
-        # Player y enemigo borran los muros bajo su matriz; un muro o un
-        # pickup, en cambio, respetan la celda ocupada.
-        ignorar = tipo in ('PLAYER', 'ENEMY')
+
         if not self._puede_ocupar(matriz, ancla[0], ancla[1], ignorar_muros=ignorar):
             return
-        if tipo == 'ENEMY':
+
+        if tipo in ('ENEMY', 'BOSS'):
             self._spawn_enemigo(nombre, datos, ancla)
         elif tipo == 'WALL':
             for x, y in self._celdas(matriz, ancla[0], ancla[1]):
@@ -316,6 +332,9 @@ class Tanks(Game):
         self.jugador = None
         self.enemigos = []
         self.balas = []
+        self.explosiones = []
+        self.jefe_spawned = False
+        self.victoria = False
         self.martillo = None
         self._generar_muros()
         super(Tanks, self).iniciar_partida()
@@ -348,6 +367,8 @@ class Tanks(Game):
         if nombre_evento == 'ON_TICK':
             self.avanzar_mundo(self.velocidad_gravedad)
         super(Tanks, self).ejecutar_evento(nombre_evento)
+        if nombre_evento != 'ON_TARGET_SCORE':
+            self._verificar_transicion_jefe()
 
     def avanzar_mundo(self, delta):
         # Orden del spec: balas, enemigos (mover y disparar) y martillo. El
@@ -356,6 +377,15 @@ class Tanks(Game):
         self._mover_enemigos(delta)
         self._disparar_enemigos(delta)
         self._recoger_martillo()
+        
+        # --- NUEVO: Actualizar temporizador de explosiones ---
+        supervivientes_exp = []
+        for exp in self.explosiones:
+            exp['tiempo'] -= delta
+            if exp['tiempo'] > 0:
+                supervivientes_exp.append(exp)
+        self.explosiones = supervivientes_exp
+        
         if self.jugador and self.jugador['cooldown'] > 0:
             self.jugador['cooldown'] = max(0.0, self.jugador['cooldown'] - delta)
 
@@ -371,8 +401,45 @@ class Tanks(Game):
     def _intentar_mover_enemigo(self, enemigo):
         datos = self._forma(enemigo['nombre']) or {}
         matriz = self._matriz(datos)
-        # Cuatro intentos: la direccion actual y tres giros a la derecha. Si
-        # las cuatro estan bloqueadas se queda quieto (sin bucle infinito).
+        velocidad = int(datos.get('speed', 2) or 2)
+        vida = int(datos.get('hp', 1) or 1)
+        tipo = datos.get('type')
+
+        # Persecucion por atributos (HP alto o TYPE BOSS), no por el nombre
+        # de la forma: el spec pide que el motor no compare identificadores.
+        if self.jugador and (tipo == 'BOSS' or vida >= 2):
+            px, py = self.jugador['x'], self.jugador['y']
+            ex, ey = enemigo['x'], enemigo['y']
+            if abs(px - ex) > abs(py - ey):
+                dx = 1 if px > ex else -1
+                dy = 0
+            else:
+                dx = 0
+                dy = 1 if py > ey else -1
+            dir_candidata = (dx, dy)
+            girada = self._rotar_matriz(matriz, dir_candidata)
+            if self._puede_ocupar(girada, ex + dx, ey + dy, sin_enemigo=enemigo):
+                enemigo['direccion'] = dir_candidata
+                enemigo['x'] += dx
+                enemigo['y'] += dy
+                return
+
+        # Errante si SPEED es alta: cambia de rumbo de vez en cuando.
+        if velocidad >= 4:
+            enemigo['tiempo_cambio_dir'] = enemigo.get('tiempo_cambio_dir', 0.0) + 1.0
+            if enemigo['tiempo_cambio_dir'] > 3.0:
+                enemigo['tiempo_cambio_dir'] = 0.0
+                posibles = list(DIRECCIONES.values())
+                random.shuffle(posibles)
+                for d_cand in posibles:
+                    girada_r = self._rotar_matriz(matriz, d_cand)
+                    if self._puede_ocupar(girada_r, enemigo['x'] + d_cand[0],
+                                          enemigo['y'] + d_cand[1],
+                                          sin_enemigo=enemigo):
+                        enemigo['direccion'] = d_cand
+                        break
+
+        # Patrulla: avanzar y girar a la derecha si choca.
         for _ in range(4):
             dx, dy = enemigo['direccion']
             girada = self._rotar_matriz(matriz, enemigo['direccion'])
@@ -415,6 +482,10 @@ class Tanks(Game):
             direccion = self._direccion_apuntada(enemigo)
             matriz = self._rotar_matriz(self._matriz(datos), direccion)
             x, y = self._celda_frente(matriz, enemigo['x'], enemigo['y'], direccion)
+            # El jefe dispara mas fuerte: su DAMAGE pisa el de la bala comun.
+            if datos.get('type') == 'BOSS' and datos.get('damage'):
+                datos_bala = dict(datos_bala)
+                datos_bala['damage'] = int(datos.get('damage'))
             # Las balas enemigas tambien destruyen muros; lo resuelve
             # _resolver_bala al nacer la bala.
             self._nueva_bala(x, y, direccion[0], direccion[1], 'ENEMY', datos_bala)
@@ -447,6 +518,12 @@ class Tanks(Game):
                 return enemigo
         return None
 
+    def _es_jefe(self, enemigo):
+        return (self._forma(enemigo['nombre']) or {}).get('type') == 'BOSS'
+
+    def _contar_enemigos_comunes(self):
+        return len([e for e in self.enemigos if not self._es_jefe(e)])
+
     def _nueva_bala(self, x, y, dx, dy, dueno, datos):
         # La bala resuelve el choque ya en su celda de nacimiento: un disparo a
         # quemarropa (la celda de enfrente ya es del objetivo) pega en este
@@ -466,23 +543,64 @@ class Tanks(Game):
             self.grid[y][x] = 0
             self.ejecutar_evento('ON_BULLET_HIT_WALL')
             return False
+            
         if bala['dueno'] == 'PLAYER':
             enemigo = self._enemigo_en(x, y)
             if enemigo is None:
                 return True
             enemigo['hp'] -= bala['dano']
             if enemigo['hp'] <= 0:
+                self.explosiones.append({
+                    'x': x, 'y': y,
+                    'tiempo': 0.35,
+                    'duracion_total': 0.35
+                })
+                era_jefe = self._es_jefe(enemigo)
                 self.enemigos.remove(enemigo)
-                self.ejecutar_evento('ON_ENEMY_DEFEATED')
+                if era_jefe:
+                    self.victoria = True
+                    self.ejecutar_evento('ON_BOSS_DEFEATED')
+                    self.juego_terminado = True
+                else:
+                    self.ejecutar_evento('ON_ENEMY_DEFEATED')
             return False
+            
         if self._jugador_en(x, y):
             self.jugador['hp'] -= bala['dano']
             self.ejecutar_evento('ON_PLAYER_HIT')
             if self.jugador['hp'] <= 0:
+                # Registrar explosión en la posición del jugador
+                self.explosiones.append({
+                    'x': self.jugador['x'], 'y': self.jugador['y'], 
+                    'tiempo': 0.4, 
+                    'duracion_total': 0.4
+                })
                 self.jugador['hp'] = 0
                 self.juego_terminado = True
             return False
+            
         return True
+
+    def _umbral_jefe(self):
+        config = self.datos_juego.get('config') or {}
+        if config.get('target_score') is not None:
+            return int(config['target_score'])
+        if self.nivel_config.get('target_score') is not None:
+            return int(self.nivel_config['target_score'])
+        return 1000
+
+    def _verificar_transicion_jefe(self):
+        if self.jefe_spawned or self.juego_terminado:
+            return
+        eventos = self.datos_juego.get('events') or {}
+        if 'ON_TARGET_SCORE' not in eventos:
+            return
+        if self.puntuacion < self._umbral_jefe():
+            return
+        self.jefe_spawned = True
+        # Transicion: se retiran los tanques comunes para dejar el duelo.
+        self.enemigos = [e for e in self.enemigos if self._es_jefe(e)]
+        self.ejecutar_evento('ON_TARGET_SCORE')
 
     def _avanzar_balas(self):
         supervivientes = []
@@ -505,16 +623,39 @@ class Tanks(Game):
     def dibujar_elementos(self):
         if self.martillo:
             self._dibujar_martillo(self.martillo[0], self.martillo[1])
+            
         for enemigo in self.enemigos:
             datos = self._forma(enemigo['nombre']) or {}
-            self._dibujar_tanque(enemigo['x'], enemigo['y'], enemigo['direccion'],
-                                 self._color_de(datos))
+            if self._es_jefe(enemigo):
+                matriz = self._rotar_matriz(self._matriz(datos), enemigo['direccion'])
+                self._dibujar_entidad(matriz, enemigo['x'], enemigo['y'],
+                                      self._color_de(datos))
+                self._dibujar_canon_jefe(enemigo['x'], enemigo['y'],
+                                         enemigo['direccion'], len(matriz),
+                                         self._color_de(datos))
+            else:
+                self._dibujar_tanque(enemigo['x'], enemigo['y'], enemigo['direccion'],
+                                     self._color_de(datos))
+            if enemigo['max_hp'] > 1:
+                lado = len(self._matriz(datos)) if self._es_jefe(enemigo) else 1
+                self._dibujar_barra_vida(enemigo['x'], enemigo['y'],
+                                         enemigo['hp'], enemigo['max_hp'],
+                                         celdas=lado)
+                
         for bala in self.balas:
             self._dibujar_bala(bala)
+            
+        for exp in self.explosiones:
+            self._dibujar_explosion(exp)
+            
         if self.jugador:
             datos = self._forma(self.jugador['nombre']) or {}
             self._dibujar_tanque(self.jugador['x'], self.jugador['y'],
                                  self.jugador['orientacion'], self._color_de(datos))
+            # --- NUEVO: Mostrar barra de vida flotante sobre el jugador ---
+            self._dibujar_barra_vida(self.jugador['x'], self.jugador['y'], 
+                                     self.jugador['hp'], self.jugador['max_hp'])
+                                     
         self._actualizar_label_vida()
 
     def _dibujar_tanque(self, x, y, direccion, color):
@@ -551,7 +692,44 @@ class Tanks(Game):
         for cx, cy in self._celdas(matriz, x, y):
             if self._dentro((cx, cy)):
                 self.dibujar_celda(cx, cy, color)
+    
+    def _dibujar_canon_jefe(self, x, y, direccion, lado, color):
+        # El cuerpo ya ocupa la matriz grande; el canon se dibuja saliendo
+        # del centro hacia la cara frontal.
+        c = self.taman_celda
+        cx = x + lado / 2.0
+        cy = y + lado / 2.0
+        dx, dy = direccion
+        grosor = 0.35
+        largo = lado * 0.45
+        if dx != 0:
+            x1, y1 = (cx, cy - grosor / 2.0)
+            x2, y2 = (cx + dx * largo, cy + grosor / 2.0)
+            if dx < 0:
+                x1, x2 = x2, x1
+        else:
+            x1, y1 = (cx - grosor / 2.0, cy)
+            x2, y2 = (cx + grosor / 2.0, cy + dy * largo)
+            if dy < 0:
+                y1, y2 = y2, y1
+        self.canvas.create_rectangle(x1 * c, y1 * c, x2 * c, y2 * c,
+                                     fill=color, outline='#FFFFFF')
 
+    def _dibujar_explosion(self, exp):
+        c = self.taman_celda
+        x1, y1 = exp['x'] * c, exp['y'] * c
+        progreso = 1.0 - (exp['tiempo'] / exp['duracion_total'])
+        # El radio se expande conforme avanza el tiempo de la animación
+        radio = c * (0.2 + 0.6 * progreso)
+        cx, cy = x1 + c / 2, y1 + c / 2
+        
+        # Color dinámico (cambia de rojo-naranja a amarillo brillante)
+        color = '#FF4500' if progreso < 0.5 else '#FFD700'
+        
+        self.canvas.create_oval(cx - radio, cy - radio, 
+                                cx + radio, cy + radio, 
+                                fill=color, outline='#FFFFFF')
+    
     def _dibujar_bala(self, bala):
         c = self.taman_celda
         x1, y1 = bala['x'] * c, bala['y'] * c
@@ -577,3 +755,46 @@ class Tanks(Game):
         hp, maximo = self.jugador['hp'], self.jugador['max_hp']
         color = Colores.get('GREEN', '#00FF00') if hp > 1 else Colores.get('RED', '#FF0000')
         self.label_vida.config(text='VIDA %d/%d' % (hp, maximo), fg=color)
+
+    def mostrar_game_over(self):
+        if not self.victoria:
+            super(Tanks, self).mostrar_game_over()
+            return
+        top = tk.Toplevel(self.root)
+        top.title("Victoria")
+        top.geometry("320x200")
+        top.configure(bg="#1e1e2e")
+        top.resizable(False, False)
+        top.transient(self.root)
+        tk.Label(top, text=u"JEFE DERROTADO", font=("Consolas", 16, "bold"),
+                 fg="#00FFFF", bg="#1e1e2e").pack(pady=(25, 10))
+        tk.Label(top, text="Puntuacion Final: {}".format(self.puntuacion),
+                 font=("Consolas", 12), fg="#00FFFF", bg="#1e1e2e").pack(pady=5)
+        tk.Button(top, text="Aceptar", font=("Consolas", 10, "bold"),
+                  bg="#03a80b", fg="#1e1e2e", bd=0, padx=20, pady=5,
+                  command=self.cerrar_ventana).pack(pady=20)
+
+    def _dibujar_barra_vida(self, x, y, hp, max_hp, celdas=1):
+            c = self.taman_celda
+            x1 = x * c + 4
+            y1 = y * c - 8   # Posicionada ligeramente arriba de la celda
+            x2 = (x + max(1, celdas)) * c - 4
+            y2 = y * c - 3
+
+            # Si el tanque está en la fila superior (y == 0), dibujamos la barra dentro de la celda en la parte superior
+            if y <= 0:
+                y1 = y * c + 2
+                y2 = y * c + 6
+
+            # Fondo de la barra (vacío / gris oscuro)
+            self.canvas.create_rectangle(x1, y1, x2, y2, fill='#333333', outline='')
+
+            # Relleno proporcional según la salud actual
+            if max_hp > 0:
+                ancho_total = x2 - x1
+                ancho_vida = ancho_total * (float(hp) / max_hp)
+                # Cambia a rojo si queda poca vida, verde si está saludable
+                color_barra = '#00FF00' if hp > 1 else '#FF0000'
+                if ancho_vida > 0:
+                    self.canvas.create_rectangle(x1, y1, x1 + ancho_vida, y2, 
+                                                fill=color_barra, outline='')
