@@ -67,8 +67,8 @@ class Tanks(Game):
 
     def _color_de(self, datos):
         if not isinstance(datos, dict):
-            return Colores.get('CYAN', '#00FFFF')
-        return Colores.get(datos.get('color', 'CYAN'), '#00FFFF')
+            return Colores.get('GRAY', '#808080')
+        return Colores.get(datos.get('color', 'GRAY'), '#808080')
 
     # MATRICES
     # --------

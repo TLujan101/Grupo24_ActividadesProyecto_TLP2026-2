@@ -373,6 +373,8 @@ class Game(object):
         # Las flechas disparan ON_KEY_*; cada juego decide la accion.
         if key in ('UP', 'DOWN', 'LEFT', 'RIGHT'):
             self.ejecutar_evento('ON_KEY_' + key)
+        elif key in ('space', 'SPACE', ' '): 
+            self.ejecutar_evento('ON_KEY_SHOOT')
 
 
     # DIBUJO
