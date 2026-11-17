@@ -4,9 +4,9 @@ Repositorio para el desarrollo colaborativo de actividades y proyectos para la m
 ## Avance del Proyecto Final
 - [x] Actividad 1: Equipo (13 sep)
 - [x] Actividad 2: Entorno (22 sep)
-- [ ] Actividad 3: Tetris+ (06 oct)
-- [ ] Actividad 4: Snake+ (27 oct)
-- [ ] Actividad 5: Tanks (17 nov)
+- [x] Actividad 3: Tetris+ (06 oct)
+- [x] Actividad 4: Snake+ (27 oct)
+- [x] Actividad 5: Tanks (17 nov)
 - [ ] Actividad 6: Integración (07 dic)
 
 ## Estructura del repositorio
