@@ -160,47 +160,91 @@ class Parser:
         self.ast['config']['grid_size'] = [ancho, alto]
 
     def parsear_shape(self):
-            self.consumir('DEFINE')
-            self.consumir('SHAPE')
-            nombre_shape = self.consumir()
-            geometry_shape = "RECT"
-            color_shape = "CYAN"
-            chance_shape = 10
-            
-            while self.ver() in ("GEOMETRY", "COLOR", "CHANCE"):
-                token = self.consumir()
-                if token == "GEOMETRY":
-                    geometry_shape = self.consumir()
-                elif token == "COLOR":
-                    color_shape = self.consumir()
-                elif token == "CHANCE":
-                    chance_shape = self.consumir_numero()
-
-            self.consumir(':')
-            estados = []
-            while self.ver() == 'STATE':
-                self.consumir('STATE')
-                self.consumir()
+        self.consumir('DEFINE')
+        segundo_token = self.consumir()  # Puede ser 'SHAPE' o 'BOSS'
+        es_boss = (segundo_token == 'BOSS')
+        
+        nombre_shape = self.consumir()
+        
+        # Valores por defecto
+        tipo_entidad = "BOSS" if es_boss else "RECT"
+        hp = None
+        damage = None
+        speed = None
+        fire_rate = None
+        heal = None
+        owner = None
+        geometry_shape = "RECT"
+        color_shape = "CYAN"
+        chance_shape = 10
+        
+        # Lista ampliada de atributos que incluye los de Tanks y los genéricos
+        atributos_validos = ("TYPE", "HP", "DAMAGE", "SPEED", "FIRE_RATE", "HEAL", "OWNER", "GEOMETRY", "COLOR", "CHANCE")
+        
+        while self.ver() in atributos_validos:
+            attr = self.consumir()
+            # Si el atributo lleva dos puntos opcionales (ej. TYPE: o TYPE)
+            if self.ver() == ':':
                 self.consumir(':')
-                matriz = []
-                while self.ver() == '[':
-                    fila = []
-                    self.consumir('[')
-                    while self.ver() != ']':
-                        if self.ver() is None:
-                            raise Exception("Error de sintaxis: fila sin ']' antes del fin del archivo.")
-                        fila.append(self.consumir_numero())
-                        if self.ver() == ',': self.consumir(',')
-                    self.consumir(']')
-                    matriz.append(fila)
-                estados.append(matriz)
-            self.consumir('END')
-            self.ast['shapes'][nombre_shape] = {
-                "estados": estados, 
-                "geometry": geometry_shape,
-                "color": color_shape, 
-                "chance": chance_shape
-            }
+                
+            if attr == "TYPE":
+                tipo_entidad = self.consumir()
+            elif attr == "HP":
+                hp = self.consumir_numero()
+            elif attr == "DAMAGE":
+                damage = self.consumir_numero()
+            elif attr == "SPEED":
+                speed = self.consumir_numero()
+            elif attr == "FIRE_RATE":
+                fire_rate = self.consumir_numero()
+            elif attr == "HEAL":
+                heal = self.consumir_numero()
+            elif attr == "OWNER":
+                owner = self.consumir()
+            elif attr == "GEOMETRY":
+                geometry_shape = self.consumir()
+            elif attr == "COLOR":
+                color_shape = self.consumir()
+            elif attr == "CHANCE":
+                chance_shape = self.consumir_numero()
+
+        self.consumir(':') 
+        estados = []
+        while self.ver() == 'STATE':
+            self.consumir('STATE')
+            self.consumir() 
+            self.consumir(':')
+            matriz = []
+            while self.ver() == '[':
+                fila = []
+                self.consumir('[')
+                while self.ver() != ']':
+                    if self.ver() is None:
+                        raise Exception("Error de sintaxis: fila sin ']' antes del fin del archivo.")
+                    fila.append(self.consumir_numero())
+                    if self.ver() == ',': 
+                        self.consumir(',')
+                self.consumir(']')
+                matriz.append(fila)
+            estados.append(matriz)
+        self.consumir('END')
+        
+        shape_data = {
+            "estados": estados, 
+            "geometry": geometry_shape,
+            "color": color_shape, 
+            "chance": chance_shape,
+            "type": tipo_entidad
+        }
+        
+        if hp is not None: shape_data["hp"] = hp
+        if damage is not None: shape_data["damage"] = damage
+        if speed is not None: shape_data["speed"] = speed
+        if fire_rate is not None: shape_data["fire_rate"] = fire_rate
+        if heal is not None: shape_data["heal"] = heal
+        if owner is not None: shape_data["owner"] = owner
+
+        self.ast['shapes'][nombre_shape] = shape_data
     # NIVELES
     # --------
     #
@@ -208,13 +252,21 @@ class Parser:
     # posicion y en Python 2.7 un dict no conserva el orden de declaracion, asi
     # que la tecla 2 elegiria un nivel arbitrario.
 
-    MODIFICADORES_NIVEL = {'TICK': ('tick', 'real'), 'MUSIC': ('music', 'nombre'), 'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 'GEOMETRY': ('geometry', 'nombre'), 'POISON_ENABLED': ('poison_enabled', 'booleano'), 'POISON_KILLS': ('poison_kills', 'booleano'), 'CLOUDS_COUNT': ('clouds_count', 'numero')}
-
+    MODIFICADORES_NIVEL = {
+            'TICK': ('tick', 'real'), 
+            'MUSIC': ('music', 'nombre'), 
+            'WALLS': ('walls', 'numero'), # <-- Agrégalo aquí
+            'TARGET_SCORE': ('target_score', 'numero'),
+            'INVULNERABILITY_DURATION': ('invulnerability_duration','numero'), 
+            'GEOMETRY': ('geometry', 'nombre'), 
+            'POISON_ENABLED': ('poison_enabled', 'booleano'), 
+            'POISON_KILLS': ('poison_kills', 'booleano'), 
+            'CLOUDS_COUNT': ('clouds_count', 'numero')
+        }
+    
     def parsear_niveles(self):
         # LEVELS: [START: NOMBRE] (LEVEL NOMBRE: mods END)+ END
         if not self.niveles_es_default:
-            # Sin esto, un segundo bloque pisaba el primero en silencio y el
-            # autor creia haber declarado los dos.
             raise Exception("Error de sintaxis: LEVELS esta declarado mas de una vez")
         self.consumir('LEVELS')
         self.consumir(':')
@@ -226,8 +278,6 @@ class Parser:
             inicio = self.consumir()
 
         niveles = []
-        # El nivel por defecto (BABY) NO cuenta como nombre ya declarado: un
-        # .brick puede declarar perfectamente un nivel llamado BABY.
         vistos = []
         while self.ver() == 'LEVEL':
             nivel = self.parsear_nivel(vistos)
@@ -237,19 +287,15 @@ class Parser:
             raise Exception("Error de sintaxis: LEVELS no declara ningun nivel")
         self.consumir('END')
 
-        # Sin START arranca el primer nivel declarado, que es el orden del
-        # .brick. El default BABY es del caso "no hay bloque LEVELS", y ese se
-        # resuelve en __init__.
         if inicio is None:
             inicio = niveles[0]['nombre']
         if inicio not in [n['nombre'] for n in niveles]:
             raise Exception("Error de sintaxis: el nivel inicial '" + str(inicio) +
                             "' no esta definido")
-        # Sin START, arranca el primer nivel declarado (el orden del .brick).
+            
         self.ast['levels'] = niveles
         self.ast['config']['start_level'] = inicio
         self.niveles_es_default = False
-
 
     # AUDIO DECLARADO EN EL .BRICK
     # -----------------------------
